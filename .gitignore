@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.zip
+*.png
+.venv/
+vendor/
+Documents FOR REFERENCE ONLY SHOULD NOT BE UPLOADED/

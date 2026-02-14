@@ -1545,7 +1545,7 @@ class FindReplacePanel:
         def get_hints():
             return [
                 ("class:accent bold", "  Ret"), ("", "  Find & edit\n"),
-                ("class:accent bold", " ^!N"), ("class:accent bold", "/"), ("class:accent bold", "P"), ("", " Next/prev\n"),
+                ("class:accent bold", " ^K"), ("class:accent bold", "/"), ("class:accent bold", "J"), ("", " Next/prev\n"),
                 ("class:accent bold", "  ^F "), ("", "  Back to panel\n"),
                 ("class:accent bold", "  Esc"), ("", "  Close\n"),
             ]
@@ -1954,7 +1954,7 @@ def create_app(storage):
     _KB_ALL = [
         ("Esc", "Journal"), ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save"),
         ("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"), ("^R", "Cite"),
-        ("^F", "Find/Replace"), ("^!N", "Find next"), ("^!P", "Find prev"),
+        ("^F", "Find/Replace"), ("^K", "Find next"), ("^J", "Find prev"),
         ("^Z", "Undo"), ("^sZ", "Redo"),
         ("^Up", "Top"), ("^Dn", "Bottom"),
         ("^W", "Word/para"), ("^G", "This panel"), ("^S", "Shutdown*"),
@@ -1964,7 +1964,7 @@ def create_app(storage):
          ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save")],
         [("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"),
          ("^R", "Cite"), ("^F", "Find/Replace"),
-         ("^!N", "Find next"), ("^!P", "Find prev")],
+         ("^K", "Find next"), ("^J", "Find prev")],
         [("^Z", "Undo"), ("^sZ", "Redo"),
          ("^Up", "Top"), ("^Dn", "Bottom")],
         [("^W", "Word/para"), ("^G", "This panel"),
@@ -2516,12 +2516,12 @@ def create_app(storage):
             except ValueError:
                 pass
 
-    @kb.add("escape", "c-n", filter=is_editor & no_float & find_panel_open)
+    @kb.add("c-k", filter=is_editor & no_float & find_panel_open)
     def _(event):
         state.find_panel._rebuild_matches()
         state.find_panel._move(1)
 
-    @kb.add("escape", "c-p", filter=is_editor & no_float & find_panel_open)
+    @kb.add("c-j", filter=is_editor & no_float & find_panel_open)
     def _(event):
         state.find_panel._rebuild_matches()
         state.find_panel._move(-1)

@@ -1545,8 +1545,7 @@ class FindReplacePanel:
         def get_hints():
             return [
                 ("class:accent bold", "  Ret"), ("", "  Find & edit\n"),
-                ("class:accent bold", " ^!N "), ("", "  Next match\n"),
-                ("class:accent bold", " ^!P "), ("", "  Prev match\n"),
+                ("class:accent bold", " ^!N"), ("class:accent bold", "/"), ("class:accent bold", "P"), ("", " Next/prev\n"),
                 ("class:accent bold", "  ^F "), ("", "  Back to panel\n"),
                 ("class:accent bold", "  Esc"), ("", "  Close\n"),
             ]
@@ -1563,7 +1562,7 @@ class FindReplacePanel:
             self.replace_window,
             self.replace_all_window,
             Window(height=1),
-            Window(FormattedTextControl(get_hints), height=5),
+            Window(FormattedTextControl(get_hints), height=4),
         ], width=24, style="class:find-panel")
 
     def _scroll_to_cursor(self):

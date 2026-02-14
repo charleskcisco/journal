@@ -964,6 +964,7 @@ class SelectableList:
         self.items = []
         self.selected_index = 0
         self.on_select = on_select
+        self.on_navigate = None
         self._kb = KeyBindings()
         sl = self
 
@@ -971,11 +972,15 @@ class SelectableList:
         def _up(event):
             if sl.selected_index > 0:
                 sl.selected_index -= 1
+                if sl.on_navigate:
+                    sl.on_navigate()
 
         @self._kb.add("down")
         def _down(event):
             if sl.selected_index < len(sl.items) - 1:
                 sl.selected_index += 1
+                if sl.on_navigate:
+                    sl.on_navigate()
 
         @self._kb.add("enter")
         def _enter(event):
@@ -985,11 +990,15 @@ class SelectableList:
         @self._kb.add("home")
         def _home(event):
             sl.selected_index = 0
+            if sl.on_navigate:
+                sl.on_navigate()
 
         @self._kb.add("end")
         def _end(event):
             if sl.items:
                 sl.selected_index = len(sl.items) - 1
+                if sl.on_navigate:
+                    sl.on_navigate()
 
         self.control = FormattedTextControl(
             self._get_text, focusable=True, key_bindings=self._kb,
@@ -1738,6 +1747,45 @@ def create_app(storage):
     ])
 
     _preview_cache = {"path": None, "content": ""}
+    preview_buffer = Buffer(name="preview_buffer", read_only=True)
+    preview_window = Window(
+        BufferControl(
+            buffer=preview_buffer,
+            input_processors=[WordWrapProcessor()],
+            focusable=False,
+        ),
+        wrap_lines=True,
+        style="class:preview",
+    )
+
+    def update_preview():
+        if not entry_list.items:
+            preview_buffer.set_document(Document("", 0), bypass_readonly=True)
+            return
+        idx = entry_list.selected_index
+        if idx >= len(entry_list.items):
+            preview_buffer.set_document(Document("", 0), bypass_readonly=True)
+            return
+        path_str = entry_list.items[idx][0]
+        if path_str == "__empty__":
+            preview_buffer.set_document(Document("", 0), bypass_readonly=True)
+            return
+        if _preview_cache["path"] != path_str:
+            try:
+                text = Path(path_str).read_text(encoding="utf-8")
+            except OSError:
+                text = ""
+            # Strip YAML front matter
+            if text.startswith("---\n"):
+                end = text.find("\n---\n", 4)
+                if end != -1:
+                    text = text[end + 5:].lstrip("\n")
+            _preview_cache["path"] = path_str
+            _preview_cache["content"] = text
+        preview_buffer.set_document(
+            Document(_preview_cache["content"], 0), bypass_readonly=True)
+
+    entry_list.on_navigate = update_preview
 
     def refresh_entries(query=""):
         _preview_cache["path"] = None
@@ -1786,8 +1834,12 @@ def create_app(storage):
                 items.append((str(f), f"{f.name}  ({mod}, {size_kb} KB)"))
             export_list.set_items(items)
 
-    entry_search.buffer.on_text_changed += lambda buf: refresh_entries(buf.text)
+    def _on_search_changed(buf):
+        refresh_entries(buf.text)
+        update_preview()
+    entry_search.buffer.on_text_changed += _on_search_changed
     refresh_entries()
+    update_preview()
 
     def open_entry(path_str):
         if path_str == "__empty__":
@@ -1810,6 +1862,16 @@ def create_app(storage):
         state.editor_dirty = False
         content = state.storage.read_entry(entry)
         editor_area.text = content
+        # Place cursor below YAML front matter
+        cursor_pos = 0
+        if content.startswith("---\n"):
+            end = content.find("\n---\n", 4)
+            if end != -1:
+                cursor_pos = end + 5
+                # Skip trailing blank lines after front matter
+                while cursor_pos < len(content) and content[cursor_pos] == "\n":
+                    cursor_pos += 1
+        editor_area.buffer.cursor_position = cursor_pos
         state.screen = "editor"
         get_app().layout.focus(editor_area.window)
         if state.auto_save_task:
@@ -1843,36 +1905,12 @@ def create_app(storage):
 
     export_list.on_select = open_export
 
-    def _get_preview_text():
-        if not entry_list.items:
-            return [("class:hint", "")]
-        idx = entry_list.selected_index
-        if idx >= len(entry_list.items):
-            return [("class:hint", "")]
-        path_str = entry_list.items[idx][0]
-        if path_str == "__empty__":
-            return [("class:hint", "")]
-        if _preview_cache["path"] != path_str:
-            try:
-                text = Path(path_str).read_text(encoding="utf-8")
-            except OSError:
-                text = ""
-            # Strip YAML front matter
-            if text.startswith("---\n"):
-                end = text.find("\n---\n", 4)
-                if end != -1:
-                    text = text[end + 5:].lstrip("\n")
-            _preview_cache["path"] = path_str
-            _preview_cache["content"] = text
-        return [("class:preview", _preview_cache["content"])]
-
     journal_view = HSplit([
         title_hints_window,
         VSplit([
             HSplit([entry_list, entry_search]),
             Window(width=1, char="\u2502", style="class:hint"),
-            Window(FormattedTextControl(_get_preview_text),
-                   wrap_lines=True, style="class:preview"),
+            preview_window,
         ]),
     ])
 
@@ -2197,6 +2235,7 @@ def create_app(storage):
         state.current_entry = None
         state.showing_exports = False
         refresh_entries()
+        update_preview()
         get_app().layout.focus(entry_list.window)
         get_app().invalidate()
 
@@ -2410,6 +2449,7 @@ def create_app(storage):
             if new_name:
                 state.storage.rename_entry(entry, new_name)
                 refresh_entries(entry_search.text)
+                update_preview()
                 show_notification(state, f"Renamed to '{new_name}'.")
 
         asyncio.ensure_future(_do())
@@ -2447,6 +2487,7 @@ def create_app(storage):
             if ok:
                 state.storage.delete_entry(entry)
                 refresh_entries(entry_search.text)
+                update_preview()
                 show_notification(state, "Entry deleted.")
 
         asyncio.ensure_future(_do())

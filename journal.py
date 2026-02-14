@@ -2634,6 +2634,18 @@ def create_app(storage):
     def _(event):
         editor_area.buffer.cursor_position = len(editor_area.text)
 
+    @kb.add("left", filter=is_editor & no_float)
+    def _(event):
+        buf = editor_area.buffer
+        if buf.cursor_position > 0:
+            buf.cursor_position -= 1
+
+    @kb.add("right", filter=is_editor & no_float)
+    def _(event):
+        buf = editor_area.buffer
+        if buf.cursor_position < len(buf.text):
+            buf.cursor_position += 1
+
     # ── Style ────────────────────────────────────────────────────────
 
     style = PtStyle.from_dict({

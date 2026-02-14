@@ -149,11 +149,12 @@ def test_load_bib_entries():
         bib = vault / "sources" / "library.bib"
         bib.write_text('@book{doe2021, author={Doe, Jane}, title={A Book}}')
 
-        entries, path, mtime = _load_bib_entries(vault)
+        entries, path, mtime, error = _load_bib_entries(vault)
         assert len(entries) == 1
         assert entries[0].citekey == "doe2021"
         assert path is not None
         assert mtime > 0
+        assert error == ""
 
     print("  _load_bib_entries OK")
 

@@ -788,17 +788,21 @@ def _find_bib_file(vault_dir: Path) -> Optional[Path]:
     return None
 
 
-def _load_bib_entries(vault_dir: Path) -> tuple[list[BibEntry], Optional[Path], float]:
-    """Load bib entries, returning (entries, path, mtime)."""
+def _load_bib_entries(vault_dir: Path) -> tuple[list[BibEntry], Optional[Path], float, str]:
+    """Load bib entries, returning (entries, path, mtime, error)."""
     bib_path = _find_bib_file(vault_dir)
-    if bib_path and bib_path.exists():
-        try:
-            text = bib_path.read_text(encoding="utf-8")
-            entries = parse_bib_lightweight(text)
-            return entries, bib_path, bib_path.stat().st_mtime
-        except Exception:
-            pass
-    return [], bib_path, 0.0
+    if not bib_path:
+        return [], None, 0.0, "no_file"
+    if not bib_path.exists():
+        return [], bib_path, 0.0, "not_exists"
+    try:
+        text = bib_path.read_text(encoding="utf-8")
+        entries = parse_bib_lightweight(text)
+        if not entries:
+            return [], bib_path, 0.0, "no_entries"
+        return entries, bib_path, bib_path.stat().st_mtime, ""
+    except Exception as exc:
+        return [], bib_path, 0.0, str(exc)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1062,6 +1066,7 @@ class AppState:
         self.bib_entries: list[BibEntry] = []
         self.bib_path: Optional[Path] = None
         self.bib_mtime: float = 0.0
+        self.bib_error: str = ""
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1706,8 +1711,8 @@ def create_app(storage):
     state = AppState(storage)
 
     # Load .bib cache on startup
-    state.bib_entries, state.bib_path, state.bib_mtime = _load_bib_entries(
-        storage.vault_dir)
+    state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
+        _load_bib_entries(storage.vault_dir))
 
     def _refresh_bib_cache():
         """Re-parse .bib if file mtime changed."""
@@ -1715,12 +1720,12 @@ def create_app(storage):
             try:
                 cur_mtime = state.bib_path.stat().st_mtime
                 if cur_mtime != state.bib_mtime:
-                    state.bib_entries, state.bib_path, state.bib_mtime = (
+                    state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
                         _load_bib_entries(storage.vault_dir))
             except OSError:
                 pass
         else:
-            state.bib_entries, state.bib_path, state.bib_mtime = (
+            state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
                 _load_bib_entries(storage.vault_dir))
 
     # ── Journal screen widgets ────────────────────────────────────────
@@ -2497,7 +2502,14 @@ def create_app(storage):
     def _(event):
         _refresh_bib_cache()
         if not state.bib_entries:
-            show_notification(state, "No .bib file found in sources/.")
+            if state.bib_error == "no_file":
+                show_notification(state, f"No .bib file found in {storage.vault_dir}")
+            elif state.bib_error == "no_entries":
+                show_notification(state, f"0 entries parsed from {state.bib_path}")
+            elif state.bib_error:
+                show_notification(state, f".bib error: {state.bib_error[:60]}")
+            else:
+                show_notification(state, "No .bib file found.")
             return
 
         async def _do():
@@ -2522,7 +2534,12 @@ def create_app(storage):
                 async def cmd_cite():
                     _refresh_bib_cache()
                     if not state.bib_entries:
-                        show_notification(state, "No .bib file found in sources/.")
+                        if state.bib_error == "no_file":
+                            show_notification(state, f"No .bib file found in {storage.vault_dir}")
+                        elif state.bib_error:
+                            show_notification(state, f".bib error: {state.bib_error[:60]}")
+                        else:
+                            show_notification(state, "No .bib file found.")
                         return
                     dlg = CitePickerDialog(state.bib_entries)
                     ck = await show_dialog_as_float(state, dlg)

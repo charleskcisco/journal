@@ -745,6 +745,13 @@ def fuzzy_filter_entries(entries: list[Entry], query: str) -> list[Entry]:
 # ════════════════════════════════════════════════════════════════════════
 
 
+def _clean_bib_value(s: str) -> str:
+    """Strip BibLaTeX braces and extra whitespace from a field value."""
+    s = s.replace("{", "").replace("}", "")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
 def parse_bib_lightweight(text: str) -> list[BibEntry]:
     """Extract only citekey, author, and title from .bib file."""
     entries = []
@@ -752,7 +759,8 @@ def parse_bib_lightweight(text: str) -> list[BibEntry]:
     field_re = re.compile(r"(author|title)\s*=\s*[{\"](.*?)[}\"]", re.DOTALL)
     for m in entry_re.finditer(text):
         citekey = m.group(1).strip()
-        fields = {fm.group(1): fm.group(2).strip() for fm in field_re.finditer(m.group(2))}
+        fields = {fm.group(1): _clean_bib_value(fm.group(2))
+                  for fm in field_re.finditer(m.group(2))}
         if citekey:
             entries.append(BibEntry(
                 citekey=citekey,
@@ -763,10 +771,19 @@ def parse_bib_lightweight(text: str) -> list[BibEntry]:
 
 
 def _find_bib_file(vault_dir: Path) -> Optional[Path]:
-    """Find the first .bib file in vault_dir/sources/."""
+    """Find a .bib file, searching sources/ dirs then recursively."""
+    def _valid(p: Path) -> bool:
+        return not p.name.startswith("._") and ".Trash" not in p.parts
+
+    # Check vault_dir/sources/ first
     sources_dir = vault_dir / "sources"
     if sources_dir.is_dir():
         for p in sorted(sources_dir.glob("*.bib")):
+            if _valid(p):
+                return p
+    # Search recursively
+    for p in sorted(vault_dir.rglob("*.bib")):
+        if _valid(p):
             return p
     return None
 
@@ -997,8 +1014,11 @@ class SelectableList:
             return [("class:select-list.empty", "  (empty)\n")]
         result = []
         for i, (_, label) in enumerate(self.items):
-            s = "class:select-list.selected" if i == self.selected_index else ""
-            result.append((s, f"  {label}\n"))
+            if i == self.selected_index:
+                result.append(("[SetCursorPosition]", ""))
+                result.append(("class:select-list.selected", f"  {label}\n"))
+            else:
+                result.append(("", f"  {label}\n"))
         return result
 
     def set_items(self, items):

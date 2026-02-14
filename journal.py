@@ -1544,17 +1544,14 @@ class FindReplacePanel:
 
         def get_hints():
             return [
-                ("class:accent bold", " ret"), ("", "  Highlight in editor\n"),
-                ("class:accent bold", "^k"), ("", "/"), ("class:accent bold", "^j"), ("", " Next/prev result\n"),
-                ("class:accent bold", "  ^f"), ("", "  Shift panel focus\n"),
+                ("class:accent bold", " ret"), ("", "  Highlight match\n"),
+                ("class:accent bold", "  ^k"), ("", "  Next result\n"),
+                ("class:accent bold", "  ^j"), ("", "  Previous result\n"),
+                ("class:accent bold", "  ^f"), ("", "  Switch panel\n"),
                 ("class:accent bold", " esc"), ("", "  Close\n"),
             ]
 
         self.container = HSplit([
-            Window(FormattedTextControl(
-                [("class:accent bold", " Find/Replace\n")],
-            ), height=1),
-            Window(height=1, char="\u2500", style="class:hint"),
             Label(text=" Find:"),
             self.search_window,
             Window(content=self.status_control, height=1),
@@ -1562,7 +1559,7 @@ class FindReplacePanel:
             self.replace_window,
             self.replace_all_window,
             Window(height=1),
-            Window(FormattedTextControl(get_hints), height=4),
+            Window(FormattedTextControl(get_hints), height=5),
         ], width=24, style="class:find-panel")
 
     def _scroll_to_cursor(self):

@@ -1735,6 +1735,8 @@ def create_app(storage):
         Window(content=shutdown_hint_control, height=1, align=WindowAlign.RIGHT),
     ])
 
+    _preview_cache = {"path": None, "content": ""}
+
     def refresh_entries(query=""):
         _preview_cache["path"] = None
         state.entries = state.storage.list_entries()
@@ -1838,8 +1840,6 @@ def create_app(storage):
             pass
 
     export_list.on_select = open_export
-
-    _preview_cache = {"path": None, "content": ""}
 
     def _get_preview_text():
         if not entry_list.items:

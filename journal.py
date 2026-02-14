@@ -75,6 +75,8 @@ class VaultStorage:
         """List top-level .md files, sorted by modified desc."""
         entries = []
         for p in self.vault_dir.glob("*.md"):
+            if p.name.startswith("."):
+                continue
             entries.append(Entry(
                 path=p, name=p.stem,
                 modified=p.stat().st_mtime,
@@ -1734,6 +1736,7 @@ def create_app(storage):
     ])
 
     def refresh_entries(query=""):
+        _preview_cache["path"] = None
         state.entries = state.storage.list_entries()
         filtered = fuzzy_filter_entries(state.entries, query)
         if not state.entries:
@@ -1836,10 +1839,39 @@ def create_app(storage):
 
     export_list.on_select = open_export
 
+    _preview_cache = {"path": None, "content": ""}
+
+    def _get_preview_text():
+        if not entry_list.items:
+            return [("class:hint", "")]
+        idx = entry_list.selected_index
+        if idx >= len(entry_list.items):
+            return [("class:hint", "")]
+        path_str = entry_list.items[idx][0]
+        if path_str == "__empty__":
+            return [("class:hint", "")]
+        if _preview_cache["path"] != path_str:
+            try:
+                text = Path(path_str).read_text(encoding="utf-8")
+            except OSError:
+                text = ""
+            # Strip YAML front matter
+            if text.startswith("---\n"):
+                end = text.find("\n---\n", 4)
+                if end != -1:
+                    text = text[end + 5:].lstrip("\n")
+            _preview_cache["path"] = path_str
+            _preview_cache["content"] = text
+        return [("class:preview", _preview_cache["content"])]
+
     journal_view = HSplit([
         title_hints_window,
-        entry_list,
-        entry_search,
+        VSplit([
+            HSplit([entry_list, entry_search]),
+            Window(width=1, char="\u2502", style="class:hint"),
+            Window(FormattedTextControl(_get_preview_text),
+                   wrap_lines=True, style="class:preview"),
+        ]),
     ])
 
     exports_hints_control = FormattedTextControl(
@@ -2706,6 +2738,7 @@ def create_app(storage):
         "select-list": "",
         "select-list.selected": "bg:#444444",
         "select-list.empty": "#777777",
+        "preview": "#999999",
         "keybindings-panel": "bg:#2a2a2a",
         "find-panel": "bg:#2a2a2a",
         "form-label": "#aaaaaa",

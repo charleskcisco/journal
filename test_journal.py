@@ -74,10 +74,8 @@ def test_entry_dataclass():
 
 
 def test_bib_entry_dataclass():
-    b = BibEntry(citekey="smith2020", author="Smith, John", title="A Study")
+    b = BibEntry(citekey="smith2020")
     assert b.citekey == "smith2020"
-    assert b.author == "Smith, John"
-    assert b.title == "A Study"
     print("  BibEntry dataclass OK")
 
 
@@ -107,16 +105,8 @@ def test_parse_bib_lightweight():
     assert len(entries) == 3
 
     assert entries[0].citekey == "fitzgerald1925"
-    assert entries[0].author == "Fitzgerald, F. Scott"
-    assert entries[0].title == "The Great Gatsby"
-
     assert entries[1].citekey == "smith2020"
-    assert entries[1].author == "Smith, John"
-
-    # misc with no author
     assert entries[2].citekey == "web2023"
-    assert entries[2].author == ""
-    assert entries[2].title == "Understanding Gatsby"
 
     print("  parse_bib_lightweight OK")
 
@@ -161,26 +151,18 @@ def test_load_bib_entries():
 
 def test_fuzzy_filter():
     entries = [
-        BibEntry(citekey="fitzgerald1925", author="Fitzgerald, F. Scott",
-                 title="The Great Gatsby"),
-        BibEntry(citekey="smith2020", author="Smith, John",
-                 title="Green Light Symbolism"),
-        BibEntry(citekey="hemingway1952", author="Hemingway, Ernest",
-                 title="The Old Man and the Sea"),
+        BibEntry(citekey="fitzgerald1925"),
+        BibEntry(citekey="smith2020"),
+        BibEntry(citekey="hemingway1952"),
     ]
 
     results = fuzzy_filter(entries, "fitzgerald")
     assert len(results) >= 1
-    assert results[0].author == "Fitzgerald, F. Scott"
-
-    results = fuzzy_filter(entries, "gatsby")
-    assert len(results) >= 1
-    assert "Gatsby" in results[0].title
+    assert results[0].citekey == "fitzgerald1925"
 
     results = fuzzy_filter(entries, "")
     assert len(results) == 3
 
-    # Search by citekey
     results = fuzzy_filter(entries, "smith2020")
     assert len(results) >= 1
     assert results[0].citekey == "smith2020"

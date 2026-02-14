@@ -55,8 +55,6 @@ class Entry:
 class BibEntry:
     """Minimal .bib entry for search and insertion."""
     citekey: str
-    author: str
-    title: str
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -712,7 +710,7 @@ def fuzzy_filter(bib_entries: list[BibEntry], query: str) -> list[BibEntry]:
     q = query.lower()
     scored: list[tuple[float, BibEntry]] = []
     for e in bib_entries:
-        hay = f"{e.author} {e.title} {e.citekey}".lower()
+        hay = e.citekey.lower()
         if q in hay:
             scored.append((100.0, e))
         else:
@@ -745,28 +743,13 @@ def fuzzy_filter_entries(entries: list[Entry], query: str) -> list[Entry]:
 # ════════════════════════════════════════════════════════════════════════
 
 
-def _clean_bib_value(s: str) -> str:
-    """Strip BibLaTeX braces and extra whitespace from a field value."""
-    s = s.replace("{", "").replace("}", "")
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-
 def parse_bib_lightweight(text: str) -> list[BibEntry]:
-    """Extract only citekey, author, and title from .bib file."""
+    """Extract citekeys from .bib file."""
     entries = []
-    entry_re = re.compile(r"@\w+\s*\{([^,]*),\s*(.*?)\}\s*(?=@|\Z)", re.DOTALL)
-    field_re = re.compile(r"(author|title)\s*=\s*[{\"](.*?)[}\"]", re.DOTALL)
-    for m in entry_re.finditer(text):
+    for m in re.finditer(r"@\w+\s*\{([^,\s]+)", text):
         citekey = m.group(1).strip()
-        fields = {fm.group(1): _clean_bib_value(fm.group(2))
-                  for fm in field_re.finditer(m.group(2))}
         if citekey:
-            entries.append(BibEntry(
-                citekey=citekey,
-                author=fields.get("author", ""),
-                title=fields.get("title", ""),
-            ))
+            entries.append(BibEntry(citekey=citekey))
     return entries
 
 
@@ -1380,10 +1363,7 @@ class CitePickerDialog:
 
     def _update_results(self, query):
         self.filtered = fuzzy_filter(self.all_entries, query)
-        items = []
-        for e in self.filtered:
-            display = f"{e.author} \u2014 {e.title}" if e.author else f"{e.citekey} \u2014 {e.title}"
-            items.append((e.citekey, display))
+        items = [(e.citekey, e.citekey) for e in self.filtered]
         self.results.set_items(items)
         self.results.selected_index = 0
 

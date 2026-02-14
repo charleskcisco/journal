@@ -1564,7 +1564,7 @@ class FindReplacePanel:
             self.replace_all_window,
             Window(height=1),
             Window(FormattedTextControl(get_hints), height=5),
-        ], width=28, style="class:find-panel")
+        ], width=24, style="class:find-panel")
 
     def _scroll_to_cursor(self):
         if self.editor_area is not None:

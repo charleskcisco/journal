@@ -1756,6 +1756,7 @@ def create_app(storage):
         ),
         wrap_lines=True,
         style="class:preview",
+        width=D(weight=1),
     )
 
     def update_preview():
@@ -1908,7 +1909,7 @@ def create_app(storage):
     journal_view = HSplit([
         title_hints_window,
         VSplit([
-            HSplit([entry_list, entry_search]),
+            HSplit([entry_list, entry_search], width=D(weight=1)),
             Window(width=1, char="\u2502", style="class:hint"),
             preview_window,
         ]),

@@ -1490,6 +1490,12 @@ class FindReplacePanel:
         @search_kb.add("enter")
         def _search_enter(event):
             self._move(1)
+            get_app().layout.focus(self.editor_area)
+
+        @search_kb.add("s-enter")
+        def _search_shift_enter(event):
+            self._move(-1)
+            get_app().layout.focus(self.editor_area)
 
         @search_kb.add("tab")
         def _search_tab(event):
@@ -1543,9 +1549,10 @@ class FindReplacePanel:
 
         def get_hints():
             return [
-                ("class:accent bold", "  Ret"), ("", "  Next / Repl\n"),
-                ("class:accent bold", "  Tab"), ("", "  Next field\n"),
-                ("class:accent bold", "  ^F "), ("", "  Editor\n"),
+                ("class:accent bold", "  Ret"), ("", "  Find & edit\n"),
+                ("class:accent bold", " ^!N "), ("", "  Next match\n"),
+                ("class:accent bold", " ^!P "), ("", "  Prev match\n"),
+                ("class:accent bold", "  ^F "), ("", "  Back to panel\n"),
                 ("class:accent bold", "  Esc"), ("", "  Close\n"),
             ]
 
@@ -1561,7 +1568,7 @@ class FindReplacePanel:
             self.replace_window,
             self.replace_all_window,
             Window(height=1),
-            Window(FormattedTextControl(get_hints), height=4),
+            Window(FormattedTextControl(get_hints), height=5),
         ], width=24, style="class:find-panel")
 
     def _scroll_to_cursor(self):
@@ -1723,8 +1730,13 @@ def create_app(storage):
             ("class:hint", "  (n)ew (r)ename (d)elete (e)xports (/)search"),
         ]
 
-    shutdown_hint_control = FormattedTextControl(
-        lambda: [("class:hint", "\u2303S Shut down ")])
+    def _get_shutdown_hint():
+        now = time.monotonic()
+        if state.shutdown_pending and now - state.shutdown_pending < 2.0:
+            return [("class:accent bold", " \u2303S Press again to shut down ")]
+        return [("class:hint", " \u2303S Shut down ")]
+
+    shutdown_hint_control = FormattedTextControl(_get_shutdown_hint)
     title_hints_window = VSplit([
         Window(content=FormattedTextControl(_get_title_hints), height=1),
         Window(content=shutdown_hint_control, height=1, align=WindowAlign.RIGHT),
@@ -1945,19 +1957,47 @@ def create_app(storage):
         FormattedTextControl(get_status_text), height=1, style="class:status",
     )
 
+    _KB_ALL = [
+        ("Esc", "Journal"), ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save"),
+        ("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"), ("^R", "Cite"),
+        ("^F", "Find/Replace"), ("^!N", "Find next"), ("^!P", "Find prev"),
+        ("^Z", "Undo"), ("^sZ", "Redo"),
+        ("^Up", "Top"), ("^Dn", "Bottom"),
+        ("^W", "Word/para"), ("^G", "This panel"), ("^S", "Shutdown*"),
+    ]
+    _KB_SECTIONS = [
+        [("Esc", "Journal"),
+         ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save")],
+        [("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"),
+         ("^R", "Cite"), ("^F", "Find/Replace"),
+         ("^!N", "Find next"), ("^!P", "Find prev")],
+        [("^Z", "Undo"), ("^sZ", "Redo"),
+         ("^Up", "Top"), ("^Dn", "Bottom")],
+        [("^W", "Word/para"), ("^G", "This panel"),
+         ("^S", "Shutdown*")],
+    ]
+
     def get_keybindings_text():
-        sections = [
-            [("Esc", "Journal"),
-             ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save")],
-            [("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"),
-             ("^R", "Cite"), ("^F", "Find/Replace")],
-            [("^Z", "Undo"), ("^sZ", "Redo"),
-             ("^Up", "Top"), ("^Dn", "Bottom")],
-            [("^W", "Word/para"), ("^G", "This panel"),
-             ("^S", "Shutdown*")],
-        ]
+        cols = shutil.get_terminal_size().columns
+        if cols >= 100:
+            mid = (len(_KB_ALL) + 1) // 2
+            left, right = _KB_ALL[:mid], _KB_ALL[mid:]
+            result = []
+            for i in range(max(len(left), len(right))):
+                if i < len(left):
+                    k, d = left[i]
+                    result.append(("class:accent bold", f" {k:>4}"))
+                    result.append(("", f"  {d:<12}"))
+                else:
+                    result.append(("", " " * 18))
+                if i < len(right):
+                    k, d = right[i]
+                    result.append(("class:accent bold", f"  {k:>4}"))
+                    result.append(("", f"  {d}"))
+                result.append(("", "\n"))
+            return result
         result = []
-        for i, section in enumerate(sections):
+        for i, section in enumerate(_KB_SECTIONS):
             if i > 0:
                 result.append(("", "\n"))
             for key, desc in section:
@@ -1965,10 +2005,8 @@ def create_app(storage):
                 result.append(("", f"  {desc}\n"))
         return result
 
-    keybindings_panel = Window(
-        FormattedTextControl(get_keybindings_text),
-        width=22, style="class:keybindings-panel",
-    )
+    def _keybindings_panel_width():
+        return 40 if shutil.get_terminal_size().columns >= 100 else 22
 
     def get_editor_body():
         parts = []
@@ -1978,7 +2016,11 @@ def create_app(storage):
         parts.append(editor_area)
         if state.show_keybindings:
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
-            parts.append(keybindings_panel)
+            parts.append(Window(
+                FormattedTextControl(get_keybindings_text),
+                width=_keybindings_panel_width(),
+                style="class:keybindings-panel",
+            ))
         return VSplit(parts)
 
     editor_screen = HSplit([
@@ -2260,6 +2302,8 @@ def create_app(storage):
     is_journal = Condition(lambda: state.screen == "journal")
     is_editor = Condition(lambda: state.screen == "editor")
     no_float = Condition(lambda: len(state.root_container.floats) == 0)
+    find_panel_open = Condition(
+        lambda: state.show_find_panel and state.find_panel is not None)
     search_not_focused = Condition(
         lambda: get_app().layout.current_window != entry_search.window)
     entry_list_focused = is_journal & no_float & search_not_focused
@@ -2477,6 +2521,16 @@ def create_app(storage):
                 event.app.layout.focus(panel.search_window)
             except ValueError:
                 pass
+
+    @kb.add("escape", "c-n", filter=is_editor & no_float & find_panel_open)
+    def _(event):
+        state.find_panel._rebuild_matches()
+        state.find_panel._move(1)
+
+    @kb.add("escape", "c-p", filter=is_editor & no_float & find_panel_open)
+    def _(event):
+        state.find_panel._rebuild_matches()
+        state.find_panel._move(-1)
 
     @kb.add("c-r", filter=is_editor & no_float)
     def _(event):

@@ -1492,11 +1492,6 @@ class FindReplacePanel:
             self._move(1)
             get_app().layout.focus(self.editor_area)
 
-        @search_kb.add("s-enter")
-        def _search_shift_enter(event):
-            self._move(-1)
-            get_app().layout.focus(self.editor_area)
-
         @search_kb.add("tab")
         def _search_tab(event):
             get_app().layout.focus(self.replace_window)

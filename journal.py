@@ -1544,10 +1544,11 @@ class FindReplacePanel:
 
         def get_hints():
             return [
-                ("class:accent bold", "  Ret"), ("", "  Find & edit\n"),
-                ("class:accent bold", " ^K"), ("class:accent bold", "/"), ("class:accent bold", "J"), ("", " Next/prev\n"),
-                ("class:accent bold", "  ^F "), ("", "  Back to panel\n"),
-                ("class:accent bold", "  Esc"), ("", "  Close\n"),
+                ("class:accent bold", " ret"), ("", "  Highlight in editor\n"),
+                ("class:accent bold", "  ^k"), ("", "  Next result\n"),
+                ("class:accent bold", "  ^j"), ("", "  Previous result\n"),
+                ("class:accent bold", "  ^f"), ("", "  Shift panel focus\n"),
+                ("class:accent bold", " esc"), ("", "  Close\n"),
             ]
 
         self.container = HSplit([
@@ -1562,8 +1563,8 @@ class FindReplacePanel:
             self.replace_window,
             self.replace_all_window,
             Window(height=1),
-            Window(FormattedTextControl(get_hints), height=4),
-        ], width=24, style="class:find-panel")
+            Window(FormattedTextControl(get_hints), height=5),
+        ], width=28, style="class:find-panel")
 
     def _scroll_to_cursor(self):
         if self.editor_area is not None:
@@ -1721,14 +1722,14 @@ def create_app(storage):
     def _get_title_hints():
         return [
             ("class:title bold", " Journal"),
-            ("class:hint", "  (n)ew (r)ename (d)elete (e)xports (/)search"),
+            ("class:hint", "  (n) new (r) rename (d) delete (e) exports (/) search"),
         ]
 
     def _get_shutdown_hint():
         now = time.monotonic()
         if state.shutdown_pending and now - state.shutdown_pending < 2.0:
-            return [("class:accent bold", " \u2303S Press again to shut down ")]
-        return [("class:hint", " \u2303S Shut down ")]
+            return [("class:accent bold", " (^s) press again to shut down ")]
+        return [("class:hint", " (^s) shut down ")]
 
     shutdown_hint_control = FormattedTextControl(_get_shutdown_hint)
     title_hints_window = VSplit([
@@ -1952,23 +1953,21 @@ def create_app(storage):
     )
 
     _KB_ALL = [
-        ("Esc", "Journal"), ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save"),
-        ("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"), ("^R", "Cite"),
-        ("^F", "Find/Replace"), ("^K", "Find next"), ("^J", "Find prev"),
-        ("^Z", "Undo"), ("^sZ", "Redo"),
-        ("^Up", "Top"), ("^Dn", "Bottom"),
-        ("^W", "Word/para"), ("^G", "This panel"), ("^S", "Shutdown*"),
+        ("esc", "Journal"), ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save"),
+        ("^b", "Bold"), ("^i", "Italic"), ("^n", "Footnote"), ("^r", "Cite"),
+        ("^f", "Find/Replace"), ("^z", "Undo"), ("^⇧z", "Redo"),
     ]
     _KB_SECTIONS = [
-        [("Esc", "Journal"),
-         ("^P", "Commands"), ("^Q", "Quit"), ("^S", "Save")],
-        [("^B", "Bold"), ("^I", "Italic"), ("^N", "Footnote"),
-         ("^R", "Cite"), ("^F", "Find/Replace"),
-         ("^K", "Find next"), ("^J", "Find prev")],
-        [("^Z", "Undo"), ("^sZ", "Redo"),
-         ("^Up", "Top"), ("^Dn", "Bottom")],
-        [("^W", "Word/para"), ("^G", "This panel"),
-         ("^S", "Shutdown*")],
+        [("esc", "Journal"),
+         ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save")],
+        [("^b", "Bold"), ("^i", "Italic"), ("^n", "Footnote"),
+         ("^r", "Cite"), ("^f", "Find/Replace")],
+        [("^z", "Undo"), ("^⇧z", "Redo")],
+    ]
+    _KB_EXTRAS = [
+        ("^up", "Go to top"), ("^dn", "Go to bottom"),
+        ("^w", "Toggle word/¶ count"),
+        ("^g", "Show keybindings"), ("^s", "Shut down"),
     ]
 
     def get_keybindings_text():
@@ -1989,14 +1988,18 @@ def create_app(storage):
                     result.append(("class:accent bold", f"  {k:>4}"))
                     result.append(("", f"  {d}"))
                 result.append(("", "\n"))
-            return result
-        result = []
-        for i, section in enumerate(_KB_SECTIONS):
-            if i > 0:
-                result.append(("", "\n"))
-            for key, desc in section:
-                result.append(("class:accent bold", f" {key:>4}"))
-                result.append(("", f"  {desc}\n"))
+        else:
+            result = []
+            for i, section in enumerate(_KB_SECTIONS):
+                if i > 0:
+                    result.append(("", "\n"))
+                for key, desc in section:
+                    result.append(("class:accent bold", f" {key:>4}"))
+                    result.append(("", f"  {desc}\n"))
+        result.append(("", "\n"))
+        for key, desc in _KB_EXTRAS:
+            result.append(("class:accent bold", f" {key:>4}"))
+            result.append(("", f"  {desc}\n"))
         return result
 
     def _keybindings_panel_width():

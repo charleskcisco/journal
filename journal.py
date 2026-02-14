@@ -1725,6 +1725,8 @@ def create_app(storage):
 
     def _get_shutdown_hint():
         now = time.monotonic()
+        if now - state.quit_pending < 2.0:
+            return [("class:accent bold", " (^q) press again to quit ")]
         if state.shutdown_pending and now - state.shutdown_pending < 2.0:
             return [("class:accent bold", " (^s) press again to shut down ")]
         return [("class:hint", " (^s) shut down ")]
@@ -2356,7 +2358,7 @@ def create_app(storage):
             else:
                 state.escape_pending = now
                 show_notification(state,
-                                  "Press Esc again to return to journal.",
+                                  "Press esc again to return to journal.",
                                   duration=2.0)
         elif state.screen == "journal":
             if state.showing_exports:
@@ -2373,7 +2375,7 @@ def create_app(storage):
             event.app.exit()
         else:
             state.quit_pending = now
-            show_notification(state, "Press Ctrl+Q again to quit.", duration=2.0)
+            show_notification(state, "Press ^q again to quit.", duration=2.0)
 
     # -- Journal screen --
     @kb.add("n", filter=entry_list_focused)
@@ -2488,7 +2490,7 @@ def create_app(storage):
             event.app.exit()
         else:
             state.shutdown_pending = now
-            show_notification(state, "Press Ctrl+S again to shut down.", duration=2.0)
+            show_notification(state, "Press ^s again to shut down.", duration=2.0)
 
     # -- Editor screen --
     @kb.add("c-s", filter=is_editor & no_float)

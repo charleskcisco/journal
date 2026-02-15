@@ -74,7 +74,7 @@ Journal offers (if I may say so myself) a relatively robust find and replace fea
 
 ![PXL_20260215_210757382](https://github.com/user-attachments/assets/ec115020-c86a-47a8-ad09-5cfcee50b5f0)
 
-### Return to journal (esc)---the pressing twice thing makes this fascinating if you mull it over.
+### Return to Journal (esc)---the pressing twice thing makes this fascinating if you mull it over.
 If you press escape (twice to prevent accidental activation), you'll return to the Journal screen.
 
 ### Quit to CLI (ctrl+q)---how many times do you think I accidentally quit to CLI before I made this require a double press?

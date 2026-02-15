@@ -1,14 +1,18 @@
 # Journal---a writerdeck-compatible companion for your Obsidian vault 
 
-## Story
-One simple ideas undergirds Journal, a terminal-based Markdown editor built on prompt_toolkit: my Obsidian vault should stretch across different devices. Obsidian, as an Electron application, works best in a standard desktop environment; but sometimes  I don't want a standard desktop environment. Different devices offer other computing paradigms with distinct benefits. One device category in particular, the writerdeck, overlaps in functionality with Obsidian, but with its stripped down operating system cannot run that application effectively. Thus, I designed Journal as a CLI text editor for reading and writing `.md` files directly in my synced vault directory.
+## About
+One simple idea undergirds Journal, a terminal-based Markdown editor built on prompt_toolkit: my Obsidian vault should stretch across different devices. Obsidian, as an Electron application, works best in a standard desktop environment; but sometimes  I don't want a standard desktop environment. Different devices offer other computing paradigms with distinct benefits. One device category in particular, the writerdeck, overlaps in functionality with Obsidian, but with its stripped down operating system cannot run that application effectively. Thus, I designed Journal as a CLI text editor for reading and writing `.md` files directly in my synced vault directory.
 
 Some background before I explain more: I love Obsidian. I've been using it for more than seven years at this point as my primary text processing surface. I fled from the chilly embrace of Microsoft Word (I'm too old to have ever been a serious Google Docs devotee) when the time came to start writing my PhD thesis in 2018. At that point, I came to regard dependence upon proprietary software and file formats to compose, edit, and store my thoughts as abhorrent. I had played around in Evernote, Onenote, Word, looked at programs like Scrivener and Ulysses when I finally stumbled on Obsidian and cobbled together a suite of plug-ins to manage citations and conversion in concert with marvelous open source tools like Zotero and Pandoc. That setup served me well for five years, and produced what my examiners called "one of the cleanest and best formatted submissions" they 
 had ever seen. For work wholly produced in a clean, portable, and lightweight format using free tools, that's not bad.
 
 Obsidian, for all of its praiseworthy attributes, has some flaws. It's an Electron app, so certain configurations can be resource-intensive, and good luck running it on truly minimal hardware (more on that in a second). It's also a Swiss Army knife in terms of options and potential for varying configurations, which while useful at times can be distracting and counter-productive. To its credit on these points though, I reckon the vast majority of people are using it on their Apple Silicon Macbooks Air plugged into the outlets at the corner tables of their favorite local cafes and don't feel the performance weight at all. Moreover, the weight of the app is concomitant to its flexible configurability that is one of its virtues.
 
-But let's imagine that sleek, performant, fruit logo'd clamshell laptops are not the only relevant kind of device. Perhaps the writer wants to draft on a simpler, distraction-free device and edit elsewhere. Enter the writerdeck, a form of single-use device increasingly popular for composition among students and professional authors. Craig Mod quote here. Alan Jacobs too. The writerdeck is a single-purpose composition appliance, sometimes manufactured at scale running proprietary software (see Pomera, Freewrite, etc.) and sometimes assembled by hobbyists with 3D printers and off-the-shelf components for themselves or small groups of others (as with Micro-Journal) and powered by Linux (cf. the Micro-Journal rev. 2, a writerdeck designed around Raspberry Pi Zero 2 W with a 1280x400 display on which this project is designed to run by default).
+But let's imagine that sleek, performant, fruit logo'd clamshell laptops are not the only relevant kind of device. Perhaps the writer wants to draft on a simpler, distraction-free device and edit elsewhere. Enter the writerdeck, a form of single-use device increasingly popular for composition among students and professional authors. Craig Mod, in a recent newsletter talking about an Obsidian-powered pseudo-writerdeck he's been using, puts it well:
+
+> Perhaps the sweet spot was word processors---dedicated writing machines that afforded some simplicity (no dependence on physical media to write at length; search; inline editing; compact-ish) without (overly) compromising the act itself. No extraneous distractions, just thoughts and words.
+
+The writerdeck is a single-purpose composition appliance, sometimes manufactured at scale running proprietary software (see Pomera, Freewrite, etc.) and sometimes assembled by hobbyists with 3D printers and off-the-shelf components for themselves or small groups of others (as with Micro-Journal) and powered by Linux (cf. the Micro-Journal rev. 2, a writerdeck designed around Raspberry Pi Zero 2 W with a 1280x400 display on which this project is designed to run by default).
 
 At that point, the writer has two choices---well this writer had two choices. The first is this: to abandon a tool that has served him well for many years in favor of simple but limited alternatives (Wordgrinder, Micro) that could perhaps be plugged back into his working system. This could work. The solution would be to draft on Wordgrinder, Micro, or whatever else writerdeck manufacturers employ and export the resulting files to a more robust system for editing and production in Obsidian later. Many people do precisely this and I suspect they do just fine.
 
@@ -18,9 +22,6 @@ Alternatively, the writer could design an entirely new system---designed with th
 
 - Python 3.9+
 - prompt_toolkit
-- For PDF/DOCX export: Pandoc
-- For PDF export: LibreOffice
-- For printing: cups, cups-client, lpr
 
 ## First-time use
 
@@ -39,7 +40,7 @@ Journal conforms to my vault, where I use a relatively minimal set of plugins fo
 
 - Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, or shut down your writerdeck (assuming you're on a Linux-powered system with auto-login enabled).
 - From the Journal, you can also view a list of and print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below).
-- Once you enter a the Editor screen, you may edit your document (surprise again) in the markdown syntax. 
+- Once you enter the Editor screen, you may edit your document (surprise again) in the markdown syntax. 
 - As in Obsidian, you can use ctrl+p to open a command palette, from which you can access a host of features (most of those are also available via a set of Journal-specific keybindings).
 
 Let me talk about these features and their bindings in more detail (organized from least to most interesting, for whimsy's sake).
@@ -54,7 +55,7 @@ These work as you'd expect them to do. Don't worry, it gets more interesting fro
 These binds do exactly what they say on the tin, and are only barely more interesting than copy, cut, and paste, by virtue of redo's old fashioned terminal-emulator style binding. 
 
 ### Bold (ctrl+b) and italicize (ctrl+i)---boldly going where *every* text editor has gone before.
-Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in astricies. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
+Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in astericks. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
 
 ### Go to top (ctrl+up) or bottom (ctrl+down)---think about it; this is more interesting than you first thoought.
 By design, Journal places your cursor on the first line after any frontmatter. These bindings can move it either to the very top of the document or (probably more usefully) to its last line, so you can pick up where you left off.
@@ -71,7 +72,7 @@ If you press escape (twice to prevent accidental activation), you'll return to t
 ### Quit to CLI (ctrl+q)---how many times do you think I accidentally quit to CLI before I made this require a double press?
 Likewise, a double press of ctrl+q sends the user back to the command line.
 
-### Shut down (ctrl+s from the Journal screen)---a sudo command? HERE?!
+### Shut down (ctrl+s *from the Journal screen*)---a sudo command? HERE?!
 My writerdeck boots into the Journal screen, and often I spend all of my time with this device in this app. I wanted to be able to shut down without exiting to CLI, so I set up a double press of ctrl+s to do the job. (*N*.*b*., this only works if you have auto-login set up on your device, because all it does is run 'sudo shutdown now'---I know, I'm a maverick). 
 
 ### Insert blank footnote (ctrl+n)---footnotes are fastinating.
@@ -138,10 +139,10 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | Ctrl+W   | Toggle word/paragraph count          |
 | Esc (x2) | Return to file browser               |
 
-## Dependencies and other relevant tools (some of which, alas, require explanation)
+## Advanced set-up (some of which, alas, requires explanation)
 
 ### Cage + Foot
-Running this thing on the default terminal emulator in Raspberry Pi OS lite will leave you more disappointed than *The Rise of Skywalker* left me, which is...saying something. Enter Cage + Foot, which provide a terminal environment much better suited for what we're up to. [Cage](https://github.com/cage-kiosk/cage) is a "Wayland kiosk" that runs a single, maximized application. The single maximized application we want to run is [Foot](https://github.com/DanteAlighierin/foot), a fast, lightweight, minimalistic terminal emulator. If you want to start Cage, Foot, and Journal from the default terminal editor in Debian, you simply input the command `cage foot`, then `cd` into the folder where Journal is and `./run.sh`. I'll include my own foot.ini in the supporting files folder, and you can place it in `~/.config/foot` (shocker). I'll also include in that folder my own startup script, which on my Micro-Journal boots straight into Journal in Cage + Foot 
+Running this thing on the default terminal emulator in Raspberry Pi OS lite will leave you more disappointed than *The Rise of Skywalker* left me, which is...saying something. Enter Cage + Foot, which provide a terminal environment much better suited for what we're up to. [Cage](https://github.com/cage-kiosk/cage) is a "Wayland kiosk" that runs a single, maximized application. The single maximized application we want to run is [Foot](https://github.com/DanteAlighierin/foot), a fast, lightweight, minimalistic terminal emulator. If you want to start Cage, Foot, and Journal from the default terminal editor in Debian, you simply input the command `cage foot`, then `cd` into the folder where Journal is and `./run.sh`. I'll include my own foot.ini in the support folder, and you can place it in `~/.config/foot` (shocker). I'll also include in that folder my own startup script, which on my Micro-Journal boots straight into Journal in Cage + Foot 
 
 ### Pandoc and Libreoffice
 Pandoc and LibreOffice are awesome. Pandoc in particular is, I think, one of the most important pieces of software in the open source world. In this case, what we need it to do is mostly run in the background. These two applications form the pipeline from which a .md file can become a.pdf file. In a manner of speaking, these applications are the cocoon out of which your markdown caterpillar will emerge as a portable document butterfly. (That analogy might have been a little forced, but I'm only human). 

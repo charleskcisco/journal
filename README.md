@@ -20,7 +20,7 @@ The writerdeck is a single-purpose composition appliance, sometimes manufactured
 
 At that point, the writer has two choices---well this writer had two choices. The first is this: to abandon a tool that has served him well for many years in favor of simple but limited alternatives (Wordgrinder, Micro) that could perhaps be plugged back into his working system. This could suit. The solution would be to draft on Wordgrinder, Micro, or whatever else writerdeck manufacturers employ and export the resulting files to a more robust system for editing and production in Obsidian later. Many people do precisely this and I suspect they do just fine.
 
-Alternatively, the writer could design an entirely new system---designed with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Rasberry Pi Zero 2 W or similar hardware---to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
+Alternatively, the writer could design an entirely new system with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Rasberry Pi Zero 2 W or similar hardware---to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
 
 ## Dependencies
 

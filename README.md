@@ -1,5 +1,9 @@
 # Journal---a writerdeck-compatible companion for your Obsidian vault 
 
+![PXL_20260215_210709684](https://github.com/user-attachments/assets/c1d0cc66-68d1-4fe3-a967-05bf44961b97)
+
+![PXL_20260215_210658640](https://github.com/user-attachments/assets/7f9084b5-5ca3-4c06-9540-73a36168e6df)
+
 ## About
 One simple idea undergirds Journal, a terminal-based Markdown editor built on prompt_toolkit: my Obsidian vault should stretch across different devices. Obsidian, as an Electron application, works best in a standard desktop environment; but sometimes  I don't want a standard desktop environment. Different devices offer other computing paradigms with distinct benefits. One device category in particular, the writerdeck, overlaps in functionality with Obsidian, but with its stripped down operating system cannot run that application effectively. Thus, I designed Journal as a CLI text editor for reading and writing `.md` files directly in my synced vault directory.
 
@@ -48,6 +52,8 @@ Let me talk about these features and their bindings in more detail (organized fr
 ### Keybindings guide (ctrl+g)---the epitome of boring, as most essential things are
 This opens a panel on the right that serves as a guide for the keybindings below. It can stay open as you edit as a reference if needed.
 
+![PXL_20260215_210719197](https://github.com/user-attachments/assets/55e3e881-b969-427e-91a8-d2130c6c6b15)
+
 ### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
 
@@ -66,6 +72,8 @@ Word counts are a necessary evil (maybe), but they do prompt some really poor be
 ### Find and/or replace (ctrl+f)---this placement was less about how interesting it is in principle and more about how hard it was to theorize and implement.
 Journal offers (if I may say so myself) a relatively robust find and replace feature. Ctrl+f summons a panel in which you may type a particular word. At that point, you have a choice. Enter will send you into the editor pane and highlight the term you sought. You can cycle through results with ctrl+k(next) and ctrl+j previous, and you can return to the find panel with ctrl+f, from which you can then also replace that word you sought or replace every instance of it in your document.
 
+![PXL_20260215_210757382](https://github.com/user-attachments/assets/ec115020-c86a-47a8-ad09-5cfcee50b5f0)
+
 ### Return to journal (esc)---the pressing twice thing makes this fascinating if you mull it over.
 If you press escape (twice to prevent accidental activation), you'll return to the Journal screen.
 
@@ -80,6 +88,10 @@ The next two features are related. First, ctrl+n offers a quick and frictionless
 
 ### Search for and insert citekey (ctrl+r)---this will revolutionize your academic writing once you figure out how to implement it. Even if you don't like Journal, you should get this into your workflow.
 Ctrl+r will open a pop-up from which you can fuzzy search your .bib file in `~/Documents/sources/` (exported from a robust Zotero library, I'm guessing, you studious guy or gal, you) and insert a citekey at your cursor. That plus pandoc's --citeproc flag (more on that below) revolutionized citation workflow for me. You have got to try it.
+
+![PXL_20260215_211150347](https://github.com/user-attachments/assets/91ba3a21-e1e3-4f3e-aa5e-72326165fb40)
+
+![PXL_20260215_211158401](https://github.com/user-attachments/assets/b5df651e-cab4-4f79-9adc-f1c82177df8a)
 
 ### Insert frontmatter (palette only)---YAML is an old trick, but here it's used for a very specific function.
 This will insert at the top of the document the frontmatter relevant to the export function. I reckon title, author, instructor, and date are pretty self-explanatory, or will be once you understand how this feature works. Style accepts one of two case sensitive inputs: "chicago" and "mla". Spacing, likewise, accepts "single" or "double". You can also add your own frontmatter elements, the most relevant of which might be "biliography", "csl", and "tags". Now to talk about the final feature in this section.

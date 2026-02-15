@@ -1,4 +1,4 @@
-# Journal---a writerdeck-compatible companion for your Obsidian vault 
+x# Journal---a writerdeck-compatible companion for your Obsidian vault 
 
 ![PXL_20260215_210709684](https://github.com/user-attachments/assets/c1d0cc66-68d1-4fe3-a967-05bf44961b97)
 
@@ -84,7 +84,7 @@ Likewise, a double press of ctrl+q sends the user back to the command line.
 My writerdeck boots into the Journal screen, and often I spend all of my time with this device in this app. I wanted to be able to shut down without exiting to CLI, so I set up a double press of ctrl+s to do the job. (*N*.*b*., this only works if you have auto-login set up on your device, because all it does is run 'sudo shutdown now'---I know, I'm a maverick). 
 
 ### Insert blank footnote (ctrl+n)---footnotes are fastinating.
-The next two features are related. First, ctrl+n offers a quick and frictionless way to insert an inline markdown footnote (the correct kind of markdown footnote; do not @ me). Once you've done that, though, the real magic begins 
+The next two features are related. First, ctrl+n offers a quick and frictionless way to insert an inline markdown footnote (the correct kind of markdown footnote; do not @ me). Once you've done that, though, the real magic begins. 
 
 ### Search for and insert citekey (ctrl+r)---this will revolutionize your academic writing once you figure out how to implement it. Even if you don't like Journal, you should get this into your workflow.
 Ctrl+r will open a pop-up from which you can fuzzy search your .bib file in `~/Documents/sources/` (exported from a robust Zotero library, I'm guessing, you studious guy or gal, you) and insert a citekey at your cursor. That plus pandoc's --citeproc flag (more on that below) revolutionized citation workflow for me. You have got to try it.

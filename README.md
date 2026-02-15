@@ -153,6 +153,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | Esc (x2) | Return to file browser               |
 
 ## Advanced set-up (some of which, alas, requires explanation)
+To make the most of Journal, you'll need the following:
 
 ### Cage + Foot
 Running this thing on the default terminal emulator in Raspberry Pi OS lite will leave you more disappointed than *The Rise of Skywalker* left me, which is...saying something. Enter Cage + Foot, which provide a terminal environment much better suited for what we're up to. [Cage](https://github.com/cage-kiosk/cage) is a "Wayland kiosk" that runs a single, maximized application. The single maximized application we want to run is [Foot](https://github.com/DanteAlighierin/foot), a fast, lightweight, minimalistic terminal emulator. If you want to start Cage, Foot, and Journal from the default terminal editor in Debian, you simply input the command `cage foot`, then `cd` into the folder where Journal is and `./run.sh`. I'll include my own foot.ini in the support folder, and you can place it in `~/.config/foot` (shocker). I'll also include in that folder my own startup script, which on my Micro-Journal boots straight into Journal in Cage + Foot with some help from .bashrc.

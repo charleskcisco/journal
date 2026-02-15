@@ -123,7 +123,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | c   | Duplicate entry     |
 | e   | Toggle exports view |
 | /   | Focus search        |
-| ctrl+s (x2) | Shut down        |
+| Ctrl+S (x2) | Shut down        |
 
 ### Editor
 

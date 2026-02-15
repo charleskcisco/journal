@@ -63,7 +63,7 @@ These binds do exactly what they say on the tin, and are only barely more intere
 ### Bold (ctrl+b) and italicize (ctrl+i)---boldly going where *every* text editor has gone before.
 Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in asterisks. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
 
-### Go to top (ctrl+up) or bottom (ctrl+down)---think about it; this is more interesting than you first thoought.
+### Go to top (ctrl+up) or bottom (ctrl+down)---think about it and you'll realize that this is more interesting than you first thought.
 By design, Journal places your cursor on the first line after any frontmatter. These bindings can move it either to the very top of the document or (probably more usefully) to its last line, so you can pick up where you left off.
 
 ### Toggle word and paragraph count (ctrl+w)---downright fascinating is what it is.

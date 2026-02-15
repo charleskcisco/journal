@@ -1,4 +1,4 @@
-x# Journal---a writerdeck-compatible companion for your Obsidian vault 
+# Journal---a writerdeck-compatible companion for your Obsidian vault 
 
 ![PXL_20260215_210709684](https://github.com/user-attachments/assets/c1d0cc66-68d1-4fe3-a967-05bf44961b97)
 

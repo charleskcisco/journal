@@ -70,7 +70,7 @@ By design, Journal places your cursor on the first line after any frontmatter. T
 Word counts are a necessary evil (maybe), but they do prompt some really poor behavior from bad writers who need to hit them. Sometimes, though, it's helpful to measure the number of rounded, complete, coherent sets of thought you've produced. The paragraph count is your tool for that latter, more noble goal. You can also toggle this off, if you're the sort of writer who defies measurement of your process.
 
 ### Find and/or replace (ctrl+f)---this placement was less about how interesting it is in principle and more about how hard it was to theorize and implement.
-Journal offers (if I may say so myself) a relatively robust find and replace feature. Ctrl+f summons a panel in which you may type a particular word. At that point, you have a choice. Enter will send you into the editor pane and highlight the term you sought. You can cycle through results with ctrl+k(next) and ctrl+j previous, and you can return to the find panel with ctrl+f, from which you can then also replace that word you sought or replace every instance of it in your document.
+Journal offers (if I may say so myself) a relatively robust find and replace feature. Ctrl+f summons a panel in which you may type a particular word. At that point, you have a choice. Enter will send you into the editor pane and highlight the term you sought. You can cycle through results with ctrl+k (next) and ctrl+j (previous), and you can return to the find panel with ctrl+f, from which you can then also replace that word you sought or replace every instance of it in your document.
 
 ![PXL_20260215_210757382](https://github.com/user-attachments/assets/ec115020-c86a-47a8-ad09-5cfcee50b5f0)
 

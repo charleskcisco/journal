@@ -61,7 +61,7 @@ These work as you'd expect them to do. Don't worry, it gets more interesting fro
 These binds do exactly what they say on the tin, and are only barely more interesting than copy, cut, and paste, by virtue of redo's old fashioned terminal-emulator style binding. 
 
 ### Bold (ctrl+b) and italicize (ctrl+i)---boldly going where *every* text editor has gone before.
-Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in astericks. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
+Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in asterisks. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
 
 ### Go to top (ctrl+up) or bottom (ctrl+down)---think about it; this is more interesting than you first thoought.
 By design, Journal places your cursor on the first line after any frontmatter. These bindings can move it either to the very top of the document or (probably more usefully) to its last line, so you can pick up where you left off.
@@ -94,7 +94,7 @@ Ctrl+r will open a pop-up from which you can fuzzy search your .bib file in `~/D
 ![PXL_20260215_211158401](https://github.com/user-attachments/assets/b5df651e-cab4-4f79-9adc-f1c82177df8a)
 
 ### Insert frontmatter (palette only)---YAML is an old trick, but here it's used for a very specific function.
-This will insert at the top of the document the frontmatter relevant to the export function. I reckon title, author, instructor, and date are pretty self-explanatory, or will be once you understand how this feature works. Style accepts one of two case sensitive inputs: "chicago" and "mla". Spacing, likewise, accepts "single" or "double". You can also add your own frontmatter elements, the most relevant of which might be "biliography", "csl", and "tags". Now to talk about the final feature in this section.
+This will insert at the top of the document the frontmatter relevant to the export function. I reckon title, author, instructor, and date are pretty self-explanatory, or will be once you understand how this feature works. Style accepts one of two case sensitive inputs: "chicago" and "mla". Spacing, likewise, accepts "single" or "double". You can also add your own frontmatter elements, the most relevant of which might be "bibliography", "csl", and "tags". Now to talk about the final feature in this section.
 
 #### Example
 
@@ -106,8 +106,8 @@ instructor: "Prof. Name"
 date: "2026-02-13"
 spacing: double
 style: chicago
-bibliography: home/username/documents/sources/library.bib
-csl: home/username/documents/sources/chicago.csl 
+bibliography: /home/username/documents/sources/library.bib
+csl: /home/username/documents/sources/chicago.csl 
 ---
 ```
 
@@ -117,7 +117,7 @@ csl: home/username/documents/sources/chicago.csl
 - **csl**: path to `.*csl` file
 
 ### Export (palette only)---this is basically its own app, frankly.
-This feature uses pandoc and libreoffice in the background to produce a .pdf formatted for submission in academic contexts. Pulling from the frontmatter, pandoc shapes your .md into a .docx formatted according to either Chicago stlye (with a title page containing your title, author, instructor, and date and page numbers centered in the footer with the final word of the author field appended to the front) or MLA (with a header on the first page according to MLA standards and page numbers on the top right). These can be either single- or double-spaced. Then, if you selected the .pdf output, it will use libreoffice to headlessly convert the .docx into a .pdf. You can either print these outputs from the exports screen or access them via your synced vault on your PC.
+This feature uses pandoc and libreoffice in the background to produce a .pdf formatted for submission in academic contexts. Pulling from the frontmatter, pandoc shapes your .md into a .docx formatted according to either Chicago style (with a title page containing your title, author, instructor, and date and page numbers centered in the footer with the final word of the author field appended to the front) or MLA (with a header on the first page according to MLA standards and page numbers on the top right). These can be either single- or double-spaced. Then, if you selected the .pdf output, it will use libreoffice to headlessly convert the .docx into a .pdf. You can either print these outputs from the exports screen or access them via your synced vault on your PC.
 
 If you used a .bib, you can add "bibliography" and "csl" fields to the YAML and trigger pandoc's --citeproc, which will convert your citekeys to properly formatted citations and add a bibliography to your work.
 
@@ -160,7 +160,7 @@ Running this thing on the default terminal emulator in Raspberry Pi OS lite will
 ### Pandoc and Libreoffice
 Pandoc and LibreOffice are awesome. Pandoc in particular is, I think, one of the most important pieces of software in the open source world. In this case, what we need it to do is mostly run in the background. These two applications form the pipeline from which a .md file can become a.pdf file. In a manner of speaking, these applications are the cocoon out of which your markdown caterpillar will emerge as a portable document butterfly. (That analogy might have been a little forced, but I'm only human). 
 
-Technically, what's happening is less of a mystery than the whole butterfly thing. Journal is running `pandoc file.md -f markdown+smart -o file.docx` with some flags (`-- citeproc --reference-doc=`). Then comes the command `libreoffice --headless --convert-to pdf file.docx`, which gives us the .pdf we wanted all along. Some LUA filter are handling formatting, pagination, etc. on top of a few bespoke reference.docx files. Would it have been easier to learn LaTeX? Maybe. But I didn't do that, did I? The road less travelled is my preference.
+Technically, what's happening is less of a mystery than the whole butterfly thing. Journal is running `pandoc file.md -f markdown+smart -o file.docx` with some flags (`-- citeproc --reference-doc=`). Then comes the command `libreoffice --headless --convert-to pdf file.docx`, which gives us the .pdf we wanted all along. Some LUA filters are handling formatting, pagination, etc. on top of a few bespoke reference.docx files. Would it have been easier to learn LaTeX? Maybe. But I didn't do that, did I? The road less travelled is my preference.
 
 ### Syncthing
 Open source software is genuinely an under-appreciated treasure trove of incredible ideas that people around the world have had. And Syncthing like Pandoc is extremely important. I migrated from the corporate cloud services to running my own Syncthing instance a few years ago and have largely found it to be easy, profitable, and less icky.

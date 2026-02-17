@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import os
 import re
 import shutil
@@ -72,13 +73,20 @@ class VaultStorage:
         self.docx_dir.mkdir(parents=True, exist_ok=True)
 
     def list_entries(self) -> list[Entry]:
-        """List top-level .md files, sorted by modified desc."""
+        """List .md files recursively, sorted by modified desc."""
+        skip_dirs = {self.pdf_dir, self.docx_dir}
         entries = []
-        for p in self.vault_dir.glob("*.md"):
+        for p in self.vault_dir.rglob("*.md"):
             if p.name.startswith("."):
                 continue
+            # Skip files under pdf/, docx/, or hidden directories
+            if any(part.startswith(".") for part in p.relative_to(self.vault_dir).parts[:-1]):
+                continue
+            if any(p.is_relative_to(sd) for sd in skip_dirs):
+                continue
+            rel = p.relative_to(self.vault_dir).with_suffix("")
             entries.append(Entry(
-                path=p, name=p.stem,
+                path=p, name=str(rel),
                 modified=p.stat().st_mtime,
             ))
         return sorted(entries, key=lambda e: e.modified, reverse=True)
@@ -91,13 +99,21 @@ class VaultStorage:
 
     def create_entry(self, name: str) -> Entry:
         path = self.vault_dir / f"{name}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
         return Entry(path=path, name=name, modified=path.stat().st_mtime)
 
     def rename_entry(self, entry: Entry, new_name: str) -> Entry:
-        new_path = self.vault_dir / f"{new_name}.md"
+        if "/" not in new_name:
+            # No slash — rename within same directory
+            new_path = entry.path.parent / f"{new_name}.md"
+        else:
+            # Has slash — resolve relative to vault root
+            new_path = self.vault_dir / f"{new_name}.md"
+        new_path.parent.mkdir(parents=True, exist_ok=True)
         entry.path.rename(new_path)
-        return Entry(path=new_path, name=new_name, modified=new_path.stat().st_mtime)
+        rel = new_path.relative_to(self.vault_dir).with_suffix("")
+        return Entry(path=new_path, name=str(rel), modified=new_path.stat().st_mtime)
 
     def delete_entry(self, entry: Entry) -> None:
         entry.path.unlink()
@@ -1051,7 +1067,7 @@ class AppState:
         self.root_container = None
         self.auto_save_task = None
         self.export_paths = []
-        self.show_word_count = False
+        self.show_word_count = 0  # 0=words, 1=paragraphs, 2=off
         self.last_find_query = ""
         self.show_find_panel = False
         self.find_panel = None
@@ -1119,26 +1135,49 @@ def _detect_printers():
         return []
 
 
+def _detect_clipboard():
+    """Detect available clipboard commands once. Returns (copy_cmd, paste_cmd) or (None, None)."""
+    candidates = [
+        (["wl-copy"], ["wl-paste", "--no-newline"]),           # Wayland
+        (["xclip", "-selection", "clipboard"], ["xclip", "-selection", "clipboard", "-o"]),  # X11
+        (["pbcopy"], ["pbpaste"]),                              # macOS
+    ]
+    for copy_cmd, paste_cmd in candidates:
+        try:
+            subprocess.run(
+                copy_cmd, input="", text=True, timeout=1,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return copy_cmd, paste_cmd
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+    return None, None
+
+
+_CLIP_COPY_CMD, _CLIP_PASTE_CMD = _detect_clipboard()
+
+
 def _clipboard_copy(text):
     """Copy text to system clipboard."""
-    for cmd in [["wl-copy"], ["xclip", "-selection", "clipboard"]]:
-        try:
-            subprocess.run(cmd, input=text, text=True, timeout=2)
-            return True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    return False
+    if not _CLIP_COPY_CMD:
+        return False
+    try:
+        subprocess.run(_CLIP_COPY_CMD, input=text, text=True, timeout=1)
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
 
 
 def _clipboard_paste():
     """Get text from system clipboard."""
-    for cmd in [["wl-paste", "--no-newline"], ["xclip", "-selection", "clipboard", "-o"]]:
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
-            if result.returncode == 0:
-                return result.stdout
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
+    if not _CLIP_PASTE_CMD:
+        return None
+    try:
+        result = subprocess.run(_CLIP_PASTE_CMD, capture_output=True, text=True, timeout=1)
+        if result.returncode == 0:
+            return result.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
     return None
 
 
@@ -1175,7 +1214,7 @@ class InputDialog:
 
         self.text_area.buffer.accept_handler = accept
         ok_btn = Button(text=ok_text, handler=accept)
-        cancel_btn = Button(text="(c) Cancel", handler=self.cancel)
+        cancel_btn = Button(text="Cancel", handler=self.cancel)
         self.dialog = Dialog(
             title=title,
             body=HSplit([Label(text=label_text), self.text_area]),
@@ -1226,8 +1265,8 @@ class ConfirmDialog:
             title="Confirm",
             body=Window(content=self._control, height=3),
             buttons=[
-                Button(text="(y) Yes", handler=yes_handler),
-                Button(text="(n) No", handler=no_handler),
+                Button(text="Yes", handler=yes_handler),
+                Button(text="No", handler=no_handler),
             ],
             modal=True,
             width=D(preferred=50),
@@ -1262,7 +1301,7 @@ class ExportFormatDialog:
         self.dialog = Dialog(
             title="Export as",
             body=HSplit([self.list], padding=0),
-            buttons=[Button(text="(c) Cancel", handler=self.cancel)],
+            buttons=[Button(text="Cancel", handler=self.cancel)],
             modal=True,
             width=D(preferred=40, max=50),
         )
@@ -1298,7 +1337,7 @@ class PrinterPickerDialog:
         self.dialog = Dialog(
             title="Print to",
             body=HSplit([self.list]),
-            buttons=[Button(text="(c) Cancel", handler=self.cancel)],
+            buttons=[Button(text="Cancel", handler=self.cancel)],
             modal=True,
             width=D(preferred=50, max=60),
         )
@@ -1729,7 +1768,7 @@ def create_app(storage):
     def _get_title_hints():
         return [
             ("class:title bold", " Journal"),
-            ("class:hint", "  (n) new (r) rename (d) delete (e) exports (/) search"),
+            ("class:hint", "  (n) new (r) rename (c) copy (d) delete (e) exports (/) search"),
         ]
 
     def _get_shutdown_hint():
@@ -1855,7 +1894,12 @@ def create_app(storage):
         if not entry:
             # Try to construct from path
             if path.exists():
-                entry = Entry(path=path, name=path.stem,
+                try:
+                    rel = path.relative_to(storage.vault_dir).with_suffix("")
+                    name = str(rel)
+                except ValueError:
+                    name = path.stem
+                entry = Entry(path=path, name=name,
                               modified=path.stat().st_mtime)
             else:
                 return
@@ -1997,6 +2041,10 @@ def create_app(storage):
     def _ctrl_u(event):
         pass  # Disable unix-line-discard
 
+    @_editor_cb_kb.add("c-y")
+    def _redo(event):
+        editor_area.buffer.redo()
+
     @_editor_cb_kb.add("c-m")
     def _ctrl_m(event):
         event.current_buffer.newline()  # Explicit newline
@@ -2007,14 +2055,17 @@ def create_app(storage):
         if state.notification:
             return [("class:status", f" {state.notification}")]
         if state.current_entry:
-            if state.show_word_count:
+            if state.show_word_count == 0:
                 words = _word_count(editor_area.text)
                 return [("class:status",
                          f" {state.current_entry.name}  {words} words")]
-            else:
+            elif state.show_word_count == 1:
                 paras = _para_count(editor_area.text)
                 return [("class:status",
                          f" {state.current_entry.name}  {paras} \u00b6")]
+            else:
+                return [("class:status",
+                         f" {state.current_entry.name}")]
         return [("class:status", "")]
 
     status_bar = Window(
@@ -2024,18 +2075,18 @@ def create_app(storage):
     _KB_ALL = [
         ("esc", "Journal"), ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save"),
         ("^b", "Bold"), ("^i", "Italic"), ("^n", "Footnote"), ("^r", "Cite"),
-        ("^f", "Find/Replace"), ("^z", "Undo"), ("^⇧z", "Redo"),
+        ("^f", "Find/Replace"), ("^z", "Undo"), ("^y", "Redo"),
     ]
     _KB_SECTIONS = [
         [("esc", "Journal"),
          ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save")],
         [("^b", "Bold"), ("^i", "Italic"), ("^n", "Footnote"),
          ("^r", "Cite"), ("^f", "Find/Replace")],
-        [("^z", "Undo"), ("^⇧z", "Redo")],
+        [("^z", "Undo"), ("^y", "Redo")],
     ]
     _KB_EXTRAS = [
         ("^up", "Go to top"), ("^dn", "Go to bottom"),
-        ("^w", "Toggle word/¶ count"),
+        ("^w", "Cycle word/¶/off"),
         ("^g", "Show keybindings"), ("^s", "Shut down"),
     ]
 
@@ -2493,6 +2544,28 @@ def create_app(storage):
 
         asyncio.ensure_future(_do())
 
+    @kb.add("c", filter=entry_list_focused)
+    def _(event):
+        if state.showing_exports:
+            return
+        filtered = fuzzy_filter_entries(state.entries, entry_search.text)
+        idx = entry_list.selected_index
+        if idx >= len(filtered):
+            return
+        entry = filtered[idx]
+        # Generate copy name: "Name (copy)", "Name (copy 2)", etc.
+        base = entry.name
+        copy_name = f"{base} (copy)"
+        counter = 2
+        while (state.storage.vault_dir / f"{copy_name}.md").exists():
+            copy_name = f"{base} (copy {counter})"
+            counter += 1
+        text = entry.path.read_text(encoding="utf-8")
+        (state.storage.vault_dir / f"{copy_name}.md").write_text(text, encoding="utf-8")
+        refresh_entries(entry_search.text)
+        update_preview()
+        show_notification(state, f"Copied to '{copy_name}'.")
+
     @kb.add("e", filter=entry_list_focused)
     def _(event):
         toggle_exports()
@@ -2543,10 +2616,6 @@ def create_app(storage):
     def _(event):
         editor_area.buffer.undo()
 
-    @kb.add("c-y", filter=is_editor & no_float)
-    def _(event):
-        editor_area.buffer.redo()
-
     @kb.add("c-b", filter=is_editor & no_float)
     def _(event):
         do_bold()
@@ -2561,7 +2630,7 @@ def create_app(storage):
 
     @kb.add("c-w", filter=is_editor & no_float)
     def _(event):
-        state.show_word_count = not state.show_word_count
+        state.show_word_count = (state.show_word_count + 1) % 3
         get_app().invalidate()
 
     @kb.add("c-g", filter=is_editor & no_float)
@@ -2769,6 +2838,105 @@ def create_app(storage):
         if buf.cursor_position < len(buf.text):
             buf.cursor_position += 1
 
+    # ── Smooth line-by-line scrolling ────────────────────────────────
+
+    def _smooth_editor_scroll(ui_content, width, height):
+        window = editor_area.window
+        cursor_row = ui_content.cursor_position.y
+
+        def get_line_height(lineno):
+            return ui_content.get_height_for_line(lineno, width, window.get_line_prefix)
+
+        # Cursor's visual line within its paragraph
+        cursor_vline = 0
+        if cursor_row < len(editor_area.buffer.document.lines):
+            line = editor_area.buffer.document.lines[cursor_row]
+            col = ui_content.cursor_position.x
+            starts, _ = _word_wrap_boundaries(line, width)
+            for idx, s in enumerate(starts):
+                if col >= s:
+                    cursor_vline = idx
+
+        # Start from previous scroll state
+        vs = window.vertical_scroll
+        vs2 = window.vertical_scroll_2
+
+        # Validate
+        if vs >= ui_content.line_count:
+            vs, vs2 = max(0, ui_content.line_count - 1), 0
+        vs_height = get_line_height(vs)
+        if vs2 >= vs_height:
+            vs2 = max(0, vs_height - 1)
+
+        # Compute cursor's visual offset from viewport top
+        if cursor_row == vs:
+            offset = cursor_vline - vs2
+        elif cursor_row > vs:
+            offset = (get_line_height(vs) - vs2)
+            for r in range(vs + 1, cursor_row):
+                offset += get_line_height(r)
+            offset += cursor_vline
+        else:
+            offset = cursor_vline - vs2
+            for r in range(cursor_row, vs):
+                offset -= get_line_height(r)
+
+        # Scroll up if cursor above viewport
+        if offset < 0:
+            steps = -offset
+            while steps > 0 and (vs > 0 or vs2 > 0):
+                if vs2 > 0:
+                    step = min(steps, vs2)
+                    vs2 -= step
+                    steps -= step
+                else:
+                    vs -= 1
+                    vs2 = get_line_height(vs) - 1
+                    steps -= 1
+
+        # Scroll down if cursor below viewport
+        elif offset >= height:
+            steps = offset - height + 1
+            while steps > 0:
+                h = get_line_height(vs)
+                remaining = h - vs2
+                if steps < remaining:
+                    vs2 += steps
+                    steps = 0
+                else:
+                    steps -= remaining
+                    vs += 1
+                    vs2 = 0
+                    if vs >= ui_content.line_count:
+                        vs = ui_content.line_count - 1
+                        vs2 = 0
+                        break
+
+        # Prevent scrolling beyond bottom
+        if not window.allow_scroll_beyond_bottom():
+            visible = get_line_height(vs) - vs2
+            for r in range(vs + 1, ui_content.line_count):
+                visible += get_line_height(r)
+                if visible >= height:
+                    break
+            if visible < height:
+                deficit = height - visible
+                while deficit > 0 and (vs > 0 or vs2 > 0):
+                    if vs2 > 0:
+                        step = min(deficit, vs2)
+                        vs2 -= step
+                        deficit -= step
+                    else:
+                        vs -= 1
+                        vs2 = get_line_height(vs) - 1
+                        deficit -= 1
+
+        window.vertical_scroll = vs
+        window.vertical_scroll_2 = vs2
+        window.horizontal_scroll = 0
+
+    editor_area.window._scroll = _smooth_editor_scroll
+
     # ── Style ────────────────────────────────────────────────────────
 
     style = PtStyle.from_dict({
@@ -2825,11 +2993,45 @@ def create_app(storage):
 # ════════════════════════════════════════════════════════════════════════
 
 
+def _config_path() -> Path:
+    return Path.home() / ".config" / "journal" / "config.json"
+
+
+def _load_config() -> dict:
+    p = _config_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_config(cfg: dict) -> None:
+    p = _config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     if os.environ.get("JOURNAL_VAULT"):
         data_dir = Path(os.environ["JOURNAL_VAULT"])
     else:
-        data_dir = Path.home() / "Documents"
+        cfg = _load_config()
+        if cfg.get("vault"):
+            data_dir = Path(cfg["vault"]).expanduser()
+        else:
+            from prompt_toolkit import prompt as pt_prompt
+            default = str(Path.home() / "Documents")
+            try:
+                answer = pt_prompt(
+                    "Vault path: ",
+                    default=default,
+                )
+            except (EOFError, KeyboardInterrupt):
+                return
+            data_dir = Path(answer.strip()).expanduser()
+            _save_config({"vault": str(data_dir)})
 
     app = create_app(VaultStorage(data_dir))
     app.run()

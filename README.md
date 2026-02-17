@@ -37,7 +37,7 @@ JOURNAL_VAULT=~/notes ./run.sh         # custom vault directory
 ./run.sh       # launches journal
 ```
 
-By default, Journal reads `.md` files from `~/Documents/`. Exports go to `~/Documents/pdf/` and `~/Documents/docx/`.
+By default, Journal reads `.md` files from `~/Documents/`---just plain Markdown files compatible with Obsidian and any other editor. Exports go to `~/Documents/pdf/` and `~/Documents/docx/`.
 
 ## Specifics
 Journal conforms to my vault, where I use a relatively minimal set of plugins for academic writing and note taking. Hence, its features, split between the Journal and the Editor, are as follows:
@@ -170,9 +170,6 @@ Syncthing is not bundled with this application. You'll have to install it on bot
 
 ### Others that require no explantion (thank goodness)
 cups, cups-client, lpr, python, prompt_toolkit, ttf-mscorefonts-installer (look it up if you have trouble with this)
-
-## Data Storage
-Journal reads and writes `.md` files directly in the vault directory (default `~/Documents/`). No JSON, no database---just plain Markdown files compatible with Obsidian and any other editor.
 
 ## License
 MIT

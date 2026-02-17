@@ -20,7 +20,7 @@ The writerdeck is a single-purpose composition appliance, sometimes manufactured
 
 At that point, the writer has two choices---well this writer had two choices. The first is this: to abandon a tool that has served him well for many years in favor of simple but limited alternatives (Wordgrinder, Micro) that could perhaps be plugged back into his working system. This could suit. The solution would be to draft on Wordgrinder, Micro, or whatever else writerdeck manufacturers employ and export the resulting files to a more robust system for editing and production in Obsidian later. Many people do precisely this and I suspect they do just fine.
 
-Alternatively, the writer could design an entirely new system with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Rasberry Pi Zero 2 W or similar hardware---to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
+Alternatively, the writer could design an entirely new system with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Raspberry Pi Zero 2 W or similar hardware---to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
 
 ## Dependencies
 
@@ -57,8 +57,8 @@ This opens a panel on the right that serves as a guide for the keybindings below
 ### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
 
-### Undo (ctrl+z) and redo (ctrl+shift+z)---because I've accidentally deleted my entire document, too.
-These binds do exactly what they say on the tin, and are only barely more interesting than copy, cut, and paste, by virtue of redo's old fashioned terminal-emulator style binding. 
+### Undo (ctrl+z) and redo (ctrl+y)---because I've accidentally deleted my entire document, too.
+These binds do exactly what they say on the tin, and are only barely more interesting than copy, cut, and paste.
 
 ### Bold (ctrl+b) and italicize (ctrl+i)---boldly going where *every* text editor has gone before.
 Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in asterisks. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
@@ -83,7 +83,7 @@ Likewise, a double press of ctrl+q sends the user back to the command line.
 ### Shut down (ctrl+s *from the Journal screen*)---a sudo command? HERE?!
 My writerdeck boots into the Journal screen, and often I spend all of my time with this device in this app. I wanted to be able to shut down without exiting to CLI, so I set up a double press of ctrl+s to do the job. (*N*.*b*., this only works if you have auto-login set up on your device, because all it does is run 'sudo shutdown now'---I know, I'm a maverick). 
 
-### Insert blank footnote (ctrl+n)---footnotes are fastinating.
+### Insert blank footnote (ctrl+n)---footnotes are fascinating.
 The next two features are related. First, ctrl+n offers a quick and frictionless way to insert an inline markdown footnote (the correct kind of markdown footnote; do not @ me). Once you've done that, though, the real magic begins. 
 
 ### Search for and insert citekey (ctrl+r)---this will revolutionize your academic writing once you figure out how to implement it. Even if you don't like Journal, you should get this into your workflow.
@@ -150,6 +150,8 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | Ctrl+R   | Insert citation (@citekey from .bib) |
 | Ctrl+S   | Save                                 |
 | Ctrl+W   | Toggle word/paragraph count          |
+| Ctrl+Y   | Redo                                 |
+| Ctrl+Z   | Undo                                 |
 | Esc (x2) | Return to file browser               |
 
 ## Advanced set-up (some of which, alas, requires explanation)
@@ -159,7 +161,7 @@ To make the most of Journal, you'll need the following:
 Running this thing on the default terminal emulator in Raspberry Pi OS lite will leave you more disappointed than *The Rise of Skywalker* left me, which is...saying something. Enter Cage + Foot, which provide a terminal environment much better suited for what we're up to. [Cage](https://github.com/cage-kiosk/cage) is a "Wayland kiosk" that runs a single, maximized application. The single maximized application we want to run is [Foot](https://github.com/DanteAlighierin/foot), a fast, lightweight, minimalistic terminal emulator. If you want to start Cage, Foot, and Journal from the default terminal editor in Debian, you simply input the command `cage foot`, then `cd` into the folder where Journal is and `./run.sh`. I'll include my own foot.ini in the support folder, and you can place it in `~/.config/foot` (shocker). I'll also include in that folder my own startup script, which on my Micro-Journal boots straight into Journal in Cage + Foot with some help from .bashrc.
 
 ### Pandoc and Libreoffice
-Pandoc and LibreOffice are awesome. Pandoc in particular is, I think, one of the most important pieces of software in the open source world. In this case, what we need it to do is mostly run in the background. These two applications form the pipeline from which a .md file can become a.pdf file. In a manner of speaking, these applications are the cocoon out of which your markdown caterpillar will emerge as a portable document butterfly. (That analogy might have been a little forced, but I'm only human). 
+Pandoc and LibreOffice are awesome. Pandoc in particular is, I think, one of the most important pieces of software in the open source world. In this case, what we need it to do is mostly run in the background. These two applications form the pipeline from which a .md file can become a .pdf file. In a manner of speaking, these applications are the cocoon out of which your markdown caterpillar will emerge as a portable document butterfly. (That analogy might have been a little forced, but I'm only human). 
 
 Technically, what's happening is less of a mystery than the whole butterfly thing. Journal is running `pandoc file.md -f markdown+smart -o file.docx` with some flags (`--citeproc --reference-doc=`). Then comes the command `libreoffice --headless --convert-to pdf file.docx`, which gives us the .pdf we wanted all along. Some LUA filters are handling formatting, pagination, etc. on top of a few bespoke reference.docx files. Would it have been easier to learn LaTeX? Maybe. But I didn't do that, did I? The road less travelled is my preference.
 
@@ -168,7 +170,7 @@ Open source software is genuinely an under-appreciated treasure trove of incredi
 
 Syncthing is not bundled with this application. You'll have to install it on both your writerdeck and your primary device and set it up yourself, but it's shockingly simple. You install Syncthing as you would install any application in Debian or your operating system of choice and you configure it. If you're in a CLI environment, you'll have to use SSH tunneling from a device with a graphical interface in order to do so, but it's not that complicated. The command you want to run on your computer is `ssh -L 8385:Localhost:8384 user@192.168.0.2` (where you obviously replace replace the username and IP address with those that pertain to you).  Then on that device enter your web browser of choice and go to Localhost:8385. From that point, you can configure Syncthing on your writerdeck and on your primary device to sync the folder that contains your Obsidian Vault to the ~/Documents folder of your writerdeck or wherever else you want it to go (I'm not the boss of you).
 
-### Others that require no explantion (thank goodness)
+### Others that require no explanation (thank goodness)
 cups, cups-client, lpr, python, prompt_toolkit, ttf-mscorefonts-installer (look it up if you have trouble with this)
 
 ## License

@@ -1067,7 +1067,7 @@ class AppState:
         self.root_container = None
         self.auto_save_task = None
         self.export_paths = []
-        self.show_word_count = 0  # 0=words, 1=paragraphs, 2=off
+        self.show_word_count = 2  # 0=words, 1=paragraphs, 2=off
         self.last_find_query = ""
         self.show_find_panel = False
         self.find_panel = None
@@ -2041,7 +2041,7 @@ def create_app(storage):
     def _ctrl_u(event):
         pass  # Disable unix-line-discard
 
-    @_editor_cb_kb.add("c-y")
+    @_editor_cb_kb.add("c-y", eager=True)
     def _redo(event):
         editor_area.buffer.redo()
 

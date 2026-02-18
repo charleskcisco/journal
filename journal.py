@@ -1016,9 +1016,19 @@ class SelectableList:
                 if sl.on_navigate:
                     sl.on_navigate()
 
+        self._render_width = 0
         self.control = FormattedTextControl(
             self._get_text, focusable=True, key_bindings=self._kb,
         )
+        # Wrap create_content to capture the actual panel width.
+        _orig_cc = self.control.create_content
+        _sl = self
+
+        def _cc(width, height, _orig=_orig_cc):
+            _sl._render_width = width
+            return _orig(width, height)
+
+        self.control.create_content = _cc
         self.window = Window(
             content=self.control, style="class:select-list", wrap_lines=False,
         )
@@ -1026,10 +1036,7 @@ class SelectableList:
     def _get_text(self):
         if not self.items:
             return [("class:select-list.empty", "  (empty)\n")]
-        # Use previous render's width for right-justification
-        width = None
-        if self.window.render_info:
-            width = self.window.render_info.window_width
+        width = self._render_width or 0
         result = []
         for i, item in enumerate(self.items):
             _, label = item[0], item[1]
@@ -1039,7 +1046,7 @@ class SelectableList:
                 result.append(("[SetCursorPosition]", ""))
             left = f"  {label}"
             if right and width:
-                pad = max(2, width - get_cwidth(left) - len(right) - 1)
+                pad = max(2, width - get_cwidth(left) - len(right))
                 line = f"{left}{' ' * pad}{right}\n"
             elif right:
                 line = f"{left}  {right}\n"

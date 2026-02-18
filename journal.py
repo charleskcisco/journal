@@ -1026,13 +1026,26 @@ class SelectableList:
     def _get_text(self):
         if not self.items:
             return [("class:select-list.empty", "  (empty)\n")]
+        # Use previous render's width for right-justification
+        width = None
+        if self.window.render_info:
+            width = self.window.render_info.window_width
         result = []
-        for i, (_, label) in enumerate(self.items):
+        for i, item in enumerate(self.items):
+            _, label = item[0], item[1]
+            right = item[2] if len(item) > 2 else ""
+            style = "class:select-list.selected" if i == self.selected_index else ""
             if i == self.selected_index:
                 result.append(("[SetCursorPosition]", ""))
-                result.append(("class:select-list.selected", f"  {label}\n"))
+            left = f"  {label}"
+            if right and width:
+                pad = max(2, width - get_cwidth(left) - len(right) - 1)
+                line = f"{left}{' ' * pad}{right}\n"
+            elif right:
+                line = f"{left}  {right}\n"
             else:
-                result.append(("", f"  {label}\n"))
+                line = f"{left}\n"
+            result.append((style, line))
         return result
 
     def set_items(self, items):
@@ -1854,10 +1867,7 @@ def create_app(storage):
                     mod = ""
                 pin = "* " if e.name in state.pinned_paths else "  "
                 name_part = e.name
-                if mod:
-                    items.append((str(e.path), f"{pin}{name_part}  {mod}"))
-                else:
-                    items.append((str(e.path), f"{pin}{name_part}"))
+                items.append((str(e.path), f"{pin}{name_part}", mod))
             entry_list.set_items(items)
 
     def refresh_exports():

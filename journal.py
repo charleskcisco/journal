@@ -2041,10 +2041,6 @@ def create_app(storage):
     def _ctrl_u(event):
         pass  # Disable unix-line-discard
 
-    @_editor_cb_kb.add("c-y", eager=True)
-    def _redo(event):
-        editor_area.buffer.redo()
-
     @_editor_cb_kb.add("c-m")
     def _ctrl_m(event):
         event.current_buffer.newline()  # Explicit newline
@@ -2616,6 +2612,10 @@ def create_app(storage):
     def _(event):
         editor_area.buffer.undo()
 
+    @kb.add("c-y", filter=is_editor & no_float, save_before=lambda e: False)
+    def _(event):
+        editor_area.buffer.redo()
+
     @kb.add("c-b", filter=is_editor & no_float)
     def _(event):
         do_bold()
@@ -3032,6 +3032,17 @@ def main() -> None:
                 return
             data_dir = Path(answer.strip()).expanduser()
             _save_config({"vault": str(data_dir)})
+
+    # Disable terminal dsusp (^Y) so Ctrl+Y reaches the application
+    try:
+        import termios
+        fd = sys.stdin.fileno()
+        attrs = termios.tcgetattr(fd)
+        VDSUSP = termios.VDSUSP
+        attrs[6][VDSUSP] = b'\x00'
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except (ImportError, AttributeError, termios.error):
+        pass
 
     app = create_app(VaultStorage(data_dir))
     app.run()

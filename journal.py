@@ -1077,6 +1077,7 @@ class AppState:
         self.bib_path: Optional[Path] = None
         self.bib_mtime: float = 0.0
         self.bib_error: str = ""
+        self.pinned_paths: set[str] = set()
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1738,6 +1739,10 @@ def create_app(storage):
     """Build and return the prompt_toolkit Application."""
     state = AppState(storage)
 
+    # Load pinned paths from config
+    cfg = _load_config()
+    state.pinned_paths = set(cfg.get("pinned", []))
+
     # Load .bib cache on startup
     state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
         _load_bib_entries(storage.vault_dir))
@@ -1768,7 +1773,7 @@ def create_app(storage):
     def _get_title_hints():
         return [
             ("class:title bold", " Journal"),
-            ("class:hint", "  (n) new (r) rename (c) copy (d) delete (e) exports (/) search"),
+            ("class:hint", "  (n) new (r) rename (c) copy (d) delete (p) pin (e) exports (/) search"),
         ]
 
     def _get_shutdown_hint():
@@ -1837,6 +1842,9 @@ def create_app(storage):
         elif not filtered:
             entry_list.set_items([("__empty__", "No matching entries.")])
         else:
+            pinned = [e for e in filtered if e.name in state.pinned_paths]
+            unpinned = [e for e in filtered if e.name not in state.pinned_paths]
+            filtered = pinned + unpinned
             items = []
             for e in filtered:
                 try:
@@ -1844,12 +1852,12 @@ def create_app(storage):
                         "%Y-%m-%d %H:%M")
                 except (ValueError, TypeError, OSError):
                     mod = ""
-                # Right-align date with dots
+                pin = "* " if e.name in state.pinned_paths else "  "
                 name_part = e.name
                 if mod:
-                    items.append((str(e.path), f"{name_part}  {mod}"))
+                    items.append((str(e.path), f"{pin}{name_part}  {mod}"))
                 else:
-                    items.append((str(e.path), name_part))
+                    items.append((str(e.path), f"{pin}{name_part}"))
             entry_list.set_items(items)
 
     def refresh_exports():
@@ -2561,6 +2569,30 @@ def create_app(storage):
         refresh_entries(entry_search.text)
         update_preview()
         show_notification(state, f"Copied to '{copy_name}'.")
+
+    @kb.add("p", filter=entry_list_focused)
+    def _(event):
+        if state.showing_exports:
+            return
+        filtered = fuzzy_filter_entries(state.entries, entry_search.text)
+        idx = entry_list.selected_index
+        if idx >= len(filtered):
+            return
+        pinned = [e for e in filtered if e.name in state.pinned_paths]
+        unpinned = [e for e in filtered if e.name not in state.pinned_paths]
+        ordered = pinned + unpinned
+        entry = ordered[idx]
+        if entry.name in state.pinned_paths:
+            state.pinned_paths.discard(entry.name)
+            show_notification(state, f"Unpinned '{entry.name}'.")
+        else:
+            state.pinned_paths.add(entry.name)
+            show_notification(state, f"Pinned '{entry.name}'.")
+        cfg = _load_config()
+        cfg["pinned"] = sorted(state.pinned_paths)
+        _save_config(cfg)
+        refresh_entries(entry_search.text)
+        update_preview()
 
     @kb.add("e", filter=entry_list_focused)
     def _(event):

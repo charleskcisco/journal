@@ -2014,6 +2014,7 @@ def create_app(storage):
             preview_window,
         ]),
         entry_search,
+        Window(height=1, char="─", style="class:hint"),
     ])
 
     exports_view = HSplit([
@@ -2021,6 +2022,7 @@ def create_app(storage):
         Window(height=1, char="─", style="class:hint"),
         export_list,
         export_search,
+        Window(height=1, char="─", style="class:hint"),
     ])
 
     def get_journal_screen():

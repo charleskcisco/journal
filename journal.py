@@ -1920,7 +1920,7 @@ def create_app(storage):
                         "%Y-%m-%d %H:%M")
                 except (ValueError, OSError):
                     mod = ""
-                items.append((str(f), f.name, mod + " "))
+                items.append((str(f), f"  {f.name}", mod + " "))
             export_list.set_items(items)
 
     def _on_search_changed(buf):

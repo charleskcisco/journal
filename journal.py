@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -50,6 +50,7 @@ class Entry:
     path: Path          # Full path to the .md file
     name: str           # Filename without .md extension
     modified: float     # os.path.getmtime timestamp
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -88,6 +89,7 @@ class VaultStorage:
             entries.append(Entry(
                 path=p, name=str(rel),
                 modified=p.stat().st_mtime,
+                tags=_read_yaml_tags(p),
             ))
         return sorted(entries, key=lambda e: e.modified, reverse=True)
 
@@ -739,9 +741,44 @@ def fuzzy_filter(bib_entries: list[BibEntry], query: str) -> list[BibEntry]:
     return [e for _, e in scored]
 
 
+def _read_yaml_tags(path: Path) -> list[str]:
+    """Read YAML front matter and return the tags list."""
+    try:
+        with path.open(encoding="utf-8") as f:
+            if f.readline().rstrip() != "---":
+                return []
+            lines = []
+            for line in f:
+                if line.rstrip() == "---":
+                    break
+                lines.append(line)
+        text = "".join(lines)
+        # Inline: tags: [a, b, c]
+        m = re.search(r"^tags\s*:\s*\[([^\]]*)\]", text, re.MULTILINE)
+        if m:
+            return [t.strip().strip("\"'") for t in m.group(1).split(",") if t.strip()]
+        # Block:
+        # tags:
+        #   - a
+        #   - b
+        m = re.search(r"^tags\s*:(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
+        if m:
+            return [t.strip().strip("\"'")
+                    for t in re.findall(r"^\s+-\s+(.+)", m.group(1), re.MULTILINE)
+                    if t.strip()]
+    except OSError:
+        pass
+    return []
+
+
 def fuzzy_filter_entries(entries: list[Entry], query: str) -> list[Entry]:
     if not query:
         return list(entries)
+    if query.lower().startswith("tag:"):
+        tag_q = query[4:].strip().lower()
+        if not tag_q:
+            return list(entries)
+        return [e for e in entries if any(tag_q in t.lower() for t in e.tags)]
     q = query.lower()
     scored: list[tuple[float, Entry]] = []
     for e in entries:

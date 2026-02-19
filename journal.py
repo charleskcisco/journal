@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -50,7 +50,6 @@ class Entry:
     path: Path          # Full path to the .md file
     name: str           # Filename without .md extension
     modified: float     # os.path.getmtime timestamp
-    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -86,11 +85,9 @@ class VaultStorage:
             if any(p.is_relative_to(sd) for sd in skip_dirs):
                 continue
             rel = p.relative_to(self.vault_dir).with_suffix("")
-            mtime = p.stat().st_mtime
             entries.append(Entry(
                 path=p, name=str(rel),
-                modified=mtime,
-                tags=_read_yaml_tags(p, mtime),
+                modified=p.stat().st_mtime,
             ))
         return sorted(entries, key=lambda e: e.modified, reverse=True)
 
@@ -742,52 +739,9 @@ def fuzzy_filter(bib_entries: list[BibEntry], query: str) -> list[BibEntry]:
     return [e for _, e in scored]
 
 
-_tags_cache: dict[str, tuple[float, list[str]]] = {}  # path -> (mtime, tags)
-
-
-def _read_yaml_tags(path: Path, mtime: float) -> list[str]:
-    """Return tags from YAML front matter, using a mtime-keyed cache."""
-    path_str = str(path)
-    cached = _tags_cache.get(path_str)
-    if cached and cached[0] == mtime:
-        return cached[1]
-    tags: list[str] = []
-    try:
-        with path.open(encoding="utf-8") as f:
-            if f.readline().rstrip() != "---":
-                _tags_cache[path_str] = (mtime, tags)
-                return tags
-            lines = []
-            for line in f:
-                if line.rstrip() == "---":
-                    break
-                lines.append(line)
-        text = "".join(lines)
-        # Inline: tags: [a, b, c]
-        m = re.search(r"^tags\s*:\s*\[([^\]]*)\]", text, re.MULTILINE)
-        if m:
-            tags = [t.strip().strip("\"'") for t in m.group(1).split(",") if t.strip()]
-        else:
-            # Block: tags:\n  - a\n  - b
-            m = re.search(r"^tags\s*:(.*?)(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
-            if m:
-                tags = [t.strip().strip("\"'")
-                        for t in re.findall(r"^\s+-\s+(.+)", m.group(1), re.MULTILINE)
-                        if t.strip()]
-    except OSError:
-        pass
-    _tags_cache[path_str] = (mtime, tags)
-    return tags
-
-
 def fuzzy_filter_entries(entries: list[Entry], query: str) -> list[Entry]:
     if not query:
         return list(entries)
-    if query.lower().startswith("tag:"):
-        tag_q = query[4:].strip().lower()
-        if not tag_q:
-            return list(entries)
-        return [e for e in entries if any(tag_q in t.lower() for t in e.tags)]
     q = query.lower()
     scored: list[tuple[float, Entry]] = []
     for e in entries:

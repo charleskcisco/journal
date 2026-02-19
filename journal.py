@@ -1807,7 +1807,7 @@ def create_app(storage):
         return [("class:hint", " (^s) shut down ")]
 
     def _get_right_hints():
-        hints = [("class:hint", " (n) new (r) rename (c) copy (d) delete (p) pin (e) exports (/) search  ")]
+        hints = [("class:hint", " (/) search (c) copy (d) delete (e) exports (n) new (p) pin (r) rename  ")]
         hints.extend(_get_shutdown_hint())
         return hints
 
@@ -1820,7 +1820,7 @@ def create_app(storage):
         return [("class:title bold", " Exports")]
 
     def _get_exports_right_hints():
-        hints = [("class:hint", " (j) journal  (d) delete  (/) search  ")]
+        hints = [("class:hint", " (/) search  (d) delete  (j) journal  ")]
         hints.extend(_get_shutdown_hint())
         return hints
 

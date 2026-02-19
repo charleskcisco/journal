@@ -1917,11 +1917,10 @@ def create_app(storage):
             for f in filtered:
                 try:
                     mod = datetime.fromtimestamp(f.stat().st_mtime).strftime(
-                        "%b %d, %Y %H:%M")
+                        "%Y-%m-%d %H:%M")
                 except (ValueError, OSError):
                     mod = ""
-                size_kb = f.stat().st_size // 1024
-                items.append((str(f), f"{f.name}  ({mod}, {size_kb} KB)"))
+                items.append((str(f), f.name, mod))
             export_list.set_items(items)
 
     def _on_search_changed(buf):

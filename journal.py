@@ -2009,10 +2009,11 @@ def create_app(storage):
         title_hints_window,
         Window(height=1, char="─", style="class:hint"),
         VSplit([
-            HSplit([entry_list, entry_search], width=D(weight=1)),
+            entry_list,
             Window(width=1, char="\u2502", style="class:hint"),
             preview_window,
         ]),
+        entry_search,
     ])
 
     exports_view = HSplit([
@@ -2472,7 +2473,8 @@ def create_app(storage):
     find_panel_open = Condition(
         lambda: state.show_find_panel and state.find_panel is not None)
     search_not_focused = Condition(
-        lambda: get_app().layout.current_window != entry_search.window)
+        lambda: get_app().layout.current_window != entry_search.window
+        and get_app().layout.current_window != export_search.window)
     entry_list_focused = is_journal & no_float & search_not_focused
 
     # -- Global --

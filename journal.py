@@ -1790,11 +1790,13 @@ def create_app(storage):
     entry_list = SelectableList()
     export_list = SelectableList()
 
+    export_search = TextArea(
+        multiline=False, prompt=" Search: ", height=1,
+        style="class:input",
+    )
+
     def _get_title_hints():
-        return [
-            ("class:title bold", " Journal"),
-            ("class:hint", "  (n) new (r) rename (c) copy (d) delete (p) pin (e) exports (/) search"),
-        ]
+        return [("class:title bold", " Journal")]
 
     def _get_shutdown_hint():
         now = time.monotonic()
@@ -1804,10 +1806,27 @@ def create_app(storage):
             return [("class:accent bold", " (^s) press again to shut down ")]
         return [("class:hint", " (^s) shut down ")]
 
-    shutdown_hint_control = FormattedTextControl(_get_shutdown_hint)
+    def _get_right_hints():
+        hints = [("class:hint", " (n) new (r) rename (c) copy (d) delete (p) pin (e) exports (/) search  ")]
+        hints.extend(_get_shutdown_hint())
+        return hints
+
     title_hints_window = VSplit([
         Window(content=FormattedTextControl(_get_title_hints), height=1),
-        Window(content=shutdown_hint_control, height=1, align=WindowAlign.RIGHT),
+        Window(content=FormattedTextControl(_get_right_hints), height=1, align=WindowAlign.RIGHT),
+    ])
+
+    def _get_exports_title():
+        return [("class:title bold", " Exports")]
+
+    def _get_exports_right_hints():
+        hints = [("class:hint", " (j) journal  (d) delete  (/) search  ")]
+        hints.extend(_get_shutdown_hint())
+        return hints
+
+    exports_title_window = VSplit([
+        Window(content=FormattedTextControl(_get_exports_title), height=1),
+        Window(content=FormattedTextControl(_get_exports_right_hints), height=1, align=WindowAlign.RIGHT),
     ])
 
     _preview_cache = {"path": None, "content": ""}
@@ -1877,7 +1896,7 @@ def create_app(storage):
                 items.append((str(e.path), f"{pin}{name_part}", mod))
             entry_list.set_items(items)
 
-    def refresh_exports():
+    def refresh_exports(query=""):
         files = []
         for d in (state.storage.pdf_dir, state.storage.docx_dir):
             if d.is_dir():
@@ -1885,11 +1904,17 @@ def create_app(storage):
                     files.extend(d.glob(ext))
         files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         state.export_paths = files
+        filtered = files
+        if query:
+            q = query.lower()
+            filtered = [f for f in files if q in f.name.lower()]
         if not files:
             export_list.set_items([("__empty__", "No exports yet.")])
+        elif not filtered:
+            export_list.set_items([("__empty__", "No matching exports.")])
         else:
             items = []
-            for f in files:
+            for f in filtered:
                 try:
                     mod = datetime.fromtimestamp(f.stat().st_mtime).strftime(
                         "%b %d, %Y %H:%M")
@@ -1903,6 +1928,11 @@ def create_app(storage):
         refresh_entries(buf.text)
         update_preview()
     entry_search.buffer.on_text_changed += _on_search_changed
+
+    def _on_export_search_changed(buf):
+        refresh_exports(buf.text)
+    export_search.buffer.on_text_changed += _on_export_search_changed
+
     refresh_entries()
     update_preview()
 
@@ -1977,6 +2007,7 @@ def create_app(storage):
 
     journal_view = HSplit([
         title_hints_window,
+        Window(height=1, char="─", style="class:hint"),
         VSplit([
             HSplit([entry_list, entry_search], width=D(weight=1)),
             Window(width=1, char="\u2502", style="class:hint"),
@@ -1984,15 +2015,11 @@ def create_app(storage):
         ]),
     ])
 
-    exports_hints_control = FormattedTextControl(
-        lambda: [("class:hint", " (j) Journal  (d) Delete")])
-    exports_hints_window = Window(content=exports_hints_control, height=1)
-
     exports_view = HSplit([
-        Window(FormattedTextControl([("class:title", " Exports")]),
-               height=1, dont_extend_height=True),
+        exports_title_window,
+        Window(height=1, char="─", style="class:hint"),
         export_list,
-        exports_hints_window,
+        export_search,
     ])
 
     def get_journal_screen():
@@ -2431,6 +2458,7 @@ def create_app(storage):
             refresh_exports()
             get_app().layout.focus(export_list.window)
         else:
+            export_search.text = ""
             get_app().layout.focus(entry_list.window)
         get_app().invalidate()
 
@@ -2531,9 +2559,9 @@ def create_app(storage):
     def _(event):
         if state.showing_exports:
             idx = export_list.selected_index
-            if idx >= len(state.export_paths):
+            if idx >= len(export_list.items):
                 return
-            path = state.export_paths[idx]
+            path = Path(export_list.items[idx][0])
 
             async def _do():
                 dlg = ConfirmDialog(f"Delete '{path.name}'?")
@@ -2543,7 +2571,7 @@ def create_app(storage):
                         path.unlink()
                     except OSError:
                         pass
-                    refresh_exports()
+                    refresh_exports(export_search.text)
                     show_notification(state, "Export deleted.")
 
             asyncio.ensure_future(_do())
@@ -2622,12 +2650,29 @@ def create_app(storage):
 
     @kb.add("/", filter=entry_list_focused)
     def _(event):
-        event.app.layout.focus(entry_search.window)
+        if state.showing_exports:
+            event.app.layout.focus(export_search.window)
+        else:
+            event.app.layout.focus(entry_search.window)
 
     search_focused = Condition(
         lambda: state.screen == "journal"
         and len(state.root_container.floats) == 0
         and get_app().layout.current_window == entry_search.window)
+
+    export_search_focused = Condition(
+        lambda: state.screen == "journal"
+        and state.showing_exports
+        and len(state.root_container.floats) == 0
+        and get_app().layout.current_window == export_search.window)
+
+    @kb.add("escape", filter=export_search_focused, eager=True)
+    def _(event):
+        event.app.layout.focus(export_list.window)
+
+    @kb.add("down", filter=export_search_focused)
+    def _(event):
+        event.app.layout.focus(export_list.window)
 
     @kb.add("down", filter=search_focused)
     def _(event):

@@ -2009,7 +2009,7 @@ def create_app(storage):
         title_hints_window,
         Window(height=1, char="─", style="class:hint"),
         VSplit([
-            entry_list,
+            HSplit([entry_list], width=D(weight=1)),
             Window(width=1, char="\u2502", style="class:hint"),
             preview_window,
         ]),

@@ -1802,9 +1802,9 @@ THEMES = {
         preview="#999999", link="#7aa2f7", code="#a0a0a0",
     ),
     "green": _make_theme(
-        bg="#000000", fg="#33ff33", fg_dim="#1a8c1a", fg_faint="#0d4d0d",
-        accent="#66ff66", selected_bg="#003300", input_bg="#001a00",
-        preview="#1aaa1a", link="#99ff99", code="#22cc22",
+        bg="#000000", fg="#00aa00", fg_dim="#005500", fg_faint="#003300",
+        accent="#33ff33", selected_bg="#001a00", input_bg="#000d00",
+        preview="#007700", link="#66ff66", code="#009900",
     ),
     "amber": _make_theme(
         bg="#0d0800", fg="#ffb000", fg_dim="#7a5500", fg_faint="#4d3500",
@@ -2766,6 +2766,7 @@ def create_app(storage):
         idx = THEME_ORDER.index(_current_theme[0])
         _current_theme[0] = THEME_ORDER[(idx + 1) % len(THEME_ORDER)]
         event.app.style = PtStyle.from_dict(THEMES[_current_theme[0]])
+        event.app.renderer.reset()
         cfg = _load_config()
         cfg["theme"] = _current_theme[0]
         _save_config(cfg)

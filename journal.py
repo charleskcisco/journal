@@ -2172,6 +2172,20 @@ def create_app(storage):
                 else:
                     show_notification(state, "Clipboard unavailable — text not deleted.")
 
+    @_editor_cb_kb.add("backspace")
+    def _backspace(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            start = buf.selection_state.original_cursor_position
+            end = buf.cursor_position
+            if start > end:
+                start, end = end, start
+            buf.exit_selection()
+            buf.set_document(Document(buf.text[:start] + buf.text[end:], start),
+                             bypass_readonly=True)
+        else:
+            buf.delete_before_cursor()
+
     @_editor_cb_kb.add("c-u")
     def _ctrl_u(event):
         pass  # Disable unix-line-discard

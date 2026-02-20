@@ -2076,14 +2076,17 @@ def create_app(storage):
 
     export_list.on_select = open_export
 
-    # Callable style so the renderer receives resolved hex colors directly,
-    # bypassing class-lookup priority issues with unstyled HSplit parents.
-    def _hbar_style():
-        return THEMES[_current_theme[0]]["hint"]
+    # FormattedTextControl embeds the resolved style directly in the content
+    # tuples so the background is applied at the character level, bypassing
+    # the char= window rendering path that ignores bg on this terminal.
+    def _hbar():
+        def _get():
+            return [(THEMES[_current_theme[0]]["hint"], "─" * 500)]
+        return FormattedTextControl(_get)
 
     journal_view = HSplit([
         title_hints_window,
-        Window(height=1, char="─", style=_hbar_style),
+        Window(content=_hbar(), height=1),
         VSplit([
             HSplit([entry_list], width=D(weight=1)),
             Window(width=1, style="class:hint"),
@@ -2091,15 +2094,15 @@ def create_app(storage):
             Window(width=1, style="class:hint"),
             preview_window,
         ]),
-        Window(height=1, char="─", style=_hbar_style),
+        Window(content=_hbar(), height=1),
         entry_search,
     ])
 
     exports_view = HSplit([
         exports_title_window,
-        Window(height=1, char="─", style=_hbar_style),
+        Window(content=_hbar(), height=1),
         export_list,
-        Window(height=1, char="─", style=_hbar_style),
+        Window(content=_hbar(), height=1),
         export_search,
     ])
 

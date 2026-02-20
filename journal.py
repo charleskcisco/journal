@@ -2115,17 +2115,35 @@ def create_app(storage):
     def _ctrl_m(event):
         event.current_buffer.newline()  # Explicit newline
 
-    # ── Shift+arrow: disabled ────────────────────────────────────────
-    # buf.start_selection() causes shift to "stick" — emacs mode then
-    # extends the selection on every subsequent cursor movement until
-    # explicitly cancelled. Binding these to no-ops prevents that.
+    # ── Shift+arrow: start/extend selection ──────────────────────────
 
     @_editor_cb_kb.add("s-up")
+    def _sel_up(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_up()
+
     @_editor_cb_kb.add("s-down")
+    def _sel_down(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_down()
+
     @_editor_cb_kb.add("s-left")
+    def _sel_left(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_left()
+
     @_editor_cb_kb.add("s-right")
-    def _shift_arrow_noop(event):
-        pass
+    def _sel_right(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_right()
 
     editor_area.control.key_bindings = _editor_cb_kb
 
@@ -2522,6 +2540,10 @@ def create_app(storage):
                 event.app.layout.focus(editor_area)
                 event.app.invalidate()
                 return
+            if editor_area.buffer.selection_state:
+                editor_area.buffer.exit_selection()
+                event.app.invalidate()
+                return
             now = time.monotonic()
             if now - state.escape_pending < 2.0:
                 state.escape_pending = 0.0
@@ -2732,6 +2754,31 @@ def create_app(storage):
     @kb.add("c-s", filter=is_editor & no_float)
     def _(event):
         do_save()
+
+    # Plain arrows cancel selection; only fires when selection is active
+    # so normal visual-line movement is unaffected.
+    editor_has_selection = Condition(
+        lambda: editor_area.buffer.selection_state is not None)
+
+    @kb.add("up", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_up()
+
+    @kb.add("down", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_down()
+
+    @kb.add("left", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_left()
+
+    @kb.add("right", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_right()
 
     @kb.add("c-z", filter=is_editor & no_float)
     def _(event):

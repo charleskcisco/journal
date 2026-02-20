@@ -1766,7 +1766,7 @@ def _make_theme(bg, fg, fg_dim, fg_faint, accent, selected_bg, input_bg,
         "":                       f"{fg} bg:{bg}",
         "title":                  fg,
         "status":                 f"{fg_dim} bg:{input_bg}",
-        "hint":                   fg_dim,
+        "hint":                   f"{fg_dim} bg:{bg}",
         "hint.sep":               fg_faint,
         "accent":                 accent,
         "input":                  f"bg:{input_bg} {fg}",
@@ -2081,9 +2081,9 @@ def create_app(storage):
         Window(height=1, char="─", style="class:hint"),
         VSplit([
             HSplit([entry_list], width=D(weight=1)),
-            Window(width=1),
+            Window(width=1, style="class:hint"),
             Window(width=1, char="\u2502", style="class:hint"),
-            Window(width=1),
+            Window(width=1, style="class:hint"),
             preview_window,
         ]),
         Window(height=1, char="─", style="class:hint"),
@@ -2286,7 +2286,7 @@ def create_app(storage):
         if state.show_find_panel and state.find_panel:
             parts.append(state.find_panel)
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
-        parts.append(editor_area)
+        parts.append(VSplit([Window(width=1), editor_area]))
         if state.show_keybindings:
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
             parts.append(Window(

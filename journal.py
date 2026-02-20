@@ -2115,12 +2115,9 @@ def create_app(storage):
     def _ctrl_m(event):
         event.current_buffer.newline()  # Explicit newline
 
-    # ── Arrow key selection management ───────────────────────────────
-    # Take explicit control so that:
-    #   • Shift+arrow starts/extends a selection
-    #   • Unshifted arrow cancels any active selection then moves
-    # This prevents "shift stuck" (selection persisting after Shift is
-    # released) and ensures shift+down actually works.
+    # ── Shift+arrow selection (control-level, high priority) ─────────
+    # Explicitly start/extend selection on shift+arrow so shift+down
+    # works and behaviour is consistent across terminals.
 
     @_editor_cb_kb.add("s-up")
     def _sel_up(event):
@@ -2148,34 +2145,6 @@ def create_app(storage):
         buf = event.current_buffer
         if not buf.selection_state:
             buf.start_selection()
-        buf.cursor_right()
-
-    @_editor_cb_kb.add("up")
-    def _up(event):
-        buf = event.current_buffer
-        if buf.selection_state:
-            buf.exit_selection()
-        buf.cursor_up()
-
-    @_editor_cb_kb.add("down")
-    def _down(event):
-        buf = event.current_buffer
-        if buf.selection_state:
-            buf.exit_selection()
-        buf.cursor_down()
-
-    @_editor_cb_kb.add("left")
-    def _left(event):
-        buf = event.current_buffer
-        if buf.selection_state:
-            buf.exit_selection()
-        buf.cursor_left()
-
-    @_editor_cb_kb.add("right")
-    def _right(event):
-        buf = event.current_buffer
-        if buf.selection_state:
-            buf.exit_selection()
         buf.cursor_right()
 
     editor_area.control.key_bindings = _editor_cb_kb
@@ -2783,6 +2752,32 @@ def create_app(storage):
     @kb.add("c-s", filter=is_editor & no_float)
     def _(event):
         do_save()
+
+    # Cancel selection on unshifted arrow keys so shift doesn't "stick".
+    # These live in the global kb (not _editor_cb_kb) so the default
+    # visual-line movement still runs when no selection is active.
+    editor_has_selection = Condition(
+        lambda: editor_area.buffer.selection_state is not None)
+
+    @kb.add("up", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_up()
+
+    @kb.add("down", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_down()
+
+    @kb.add("left", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_left()
+
+    @kb.add("right", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        editor_area.buffer.exit_selection()
+        editor_area.buffer.cursor_right()
 
     @kb.add("c-z", filter=is_editor & no_float)
     def _(event):

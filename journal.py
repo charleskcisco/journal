@@ -2115,37 +2115,17 @@ def create_app(storage):
     def _ctrl_m(event):
         event.current_buffer.newline()  # Explicit newline
 
-    # ── Shift+arrow selection (control-level, high priority) ─────────
-    # Explicitly start/extend selection on shift+arrow so shift+down
-    # works and behaviour is consistent across terminals.
+    # ── Shift+arrow: disabled ────────────────────────────────────────
+    # buf.start_selection() causes shift to "stick" — emacs mode then
+    # extends the selection on every subsequent cursor movement until
+    # explicitly cancelled. Binding these to no-ops prevents that.
 
     @_editor_cb_kb.add("s-up")
-    def _sel_up(event):
-        buf = event.current_buffer
-        if not buf.selection_state:
-            buf.start_selection()
-        buf.cursor_up()
-
     @_editor_cb_kb.add("s-down")
-    def _sel_down(event):
-        buf = event.current_buffer
-        if not buf.selection_state:
-            buf.start_selection()
-        buf.cursor_down()
-
     @_editor_cb_kb.add("s-left")
-    def _sel_left(event):
-        buf = event.current_buffer
-        if not buf.selection_state:
-            buf.start_selection()
-        buf.cursor_left()
-
     @_editor_cb_kb.add("s-right")
-    def _sel_right(event):
-        buf = event.current_buffer
-        if not buf.selection_state:
-            buf.start_selection()
-        buf.cursor_right()
+    def _shift_arrow_noop(event):
+        pass
 
     editor_area.control.key_bindings = _editor_cb_kb
 
@@ -2752,32 +2732,6 @@ def create_app(storage):
     @kb.add("c-s", filter=is_editor & no_float)
     def _(event):
         do_save()
-
-    # Cancel selection on unshifted arrow keys so shift doesn't "stick".
-    # These live in the global kb (not _editor_cb_kb) so the default
-    # visual-line movement still runs when no selection is active.
-    editor_has_selection = Condition(
-        lambda: editor_area.buffer.selection_state is not None)
-
-    @kb.add("up", filter=is_editor & no_float & editor_has_selection)
-    def _(event):
-        editor_area.buffer.exit_selection()
-        editor_area.buffer.cursor_up()
-
-    @kb.add("down", filter=is_editor & no_float & editor_has_selection)
-    def _(event):
-        editor_area.buffer.exit_selection()
-        editor_area.buffer.cursor_down()
-
-    @kb.add("left", filter=is_editor & no_float & editor_has_selection)
-    def _(event):
-        editor_area.buffer.exit_selection()
-        editor_area.buffer.cursor_left()
-
-    @kb.add("right", filter=is_editor & no_float & editor_has_selection)
-    def _(event):
-        editor_area.buffer.exit_selection()
-        editor_area.buffer.cursor_right()
 
     @kb.add("c-z", filter=is_editor & no_float)
     def _(event):

@@ -2081,10 +2081,9 @@ def create_app(storage):
         Window(height=1, char="─", style="class:hint"),
         VSplit([
             HSplit([entry_list], width=D(weight=1)),
-            Window(
-                content=FormattedTextControl(lambda: [("class:hint", " \u2502 ")]),
-                width=3,
-            ),
+            Window(width=1),
+            Window(width=1, char="\u2502", style="class:hint"),
+            Window(width=1),
             preview_window,
         ]),
         Window(height=1, char="─", style="class:hint"),

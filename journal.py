@@ -2115,6 +2115,69 @@ def create_app(storage):
     def _ctrl_m(event):
         event.current_buffer.newline()  # Explicit newline
 
+    # ── Arrow key selection management ───────────────────────────────
+    # Take explicit control so that:
+    #   • Shift+arrow starts/extends a selection
+    #   • Unshifted arrow cancels any active selection then moves
+    # This prevents "shift stuck" (selection persisting after Shift is
+    # released) and ensures shift+down actually works.
+
+    @_editor_cb_kb.add("s-up")
+    def _sel_up(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_up()
+
+    @_editor_cb_kb.add("s-down")
+    def _sel_down(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_down()
+
+    @_editor_cb_kb.add("s-left")
+    def _sel_left(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_left()
+
+    @_editor_cb_kb.add("s-right")
+    def _sel_right(event):
+        buf = event.current_buffer
+        if not buf.selection_state:
+            buf.start_selection()
+        buf.cursor_right()
+
+    @_editor_cb_kb.add("up")
+    def _up(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            buf.exit_selection()
+        buf.cursor_up()
+
+    @_editor_cb_kb.add("down")
+    def _down(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            buf.exit_selection()
+        buf.cursor_down()
+
+    @_editor_cb_kb.add("left")
+    def _left(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            buf.exit_selection()
+        buf.cursor_left()
+
+    @_editor_cb_kb.add("right")
+    def _right(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            buf.exit_selection()
+        buf.cursor_right()
+
     editor_area.control.key_bindings = _editor_cb_kb
 
     def get_status_text():

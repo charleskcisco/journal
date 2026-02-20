@@ -1757,14 +1757,74 @@ class FindReplacePanel:
 
 _FRONTMATTER_PROPS = ["title", "author", "instructor", "date", "spacing", "style"]
 
+# ── Themes ───────────────────────────────────────────────────────────────
+
+def _make_theme(bg, fg, fg_dim, fg_faint, accent, selected_bg, input_bg,
+                preview, link, code):
+    """Build a full style dict from a small set of theme primitives."""
+    return {
+        "":                       f"{fg} bg:{bg}",
+        "title":                  fg,
+        "status":                 f"{fg_dim} bg:{input_bg}",
+        "hint":                   fg_dim,
+        "hint.sep":               fg_faint,
+        "accent":                 accent,
+        "input":                  f"bg:{input_bg} {fg}",
+        "editor":                 "",
+        "select-list":            "",
+        "select-list.selected":   f"bg:{selected_bg}",
+        "select-list.empty":      fg_dim,
+        "preview":                preview,
+        "keybindings-panel":      f"bg:{bg}",
+        "find-panel":             f"bg:{bg}",
+        "form-label":             preview,
+        "dialog":                 f"{fg} bg:{bg}",
+        "dialog.body":            f"{fg} bg:{bg}",
+        "dialog text-area":       f"{fg} bg:{input_bg}",
+        "dialog frame.label":     f"{fg} bold",
+        "dialog shadow":          f"bg:{fg_faint}",
+        "button":                 f"{fg} bg:{selected_bg}",
+        "button.focused":         f"{fg} bg:{fg_dim}",
+        "label":                  fg,
+        "md.heading-marker":      fg_faint,
+        "md.heading":             f"bold {accent}",
+        "md.bold":                "bold",
+        "md.italic":              "italic",
+        "md.code":                code,
+        "md.footnote":            link,
+        "md.link":                link,
+    }
+
+THEMES = {
+    "default": _make_theme(
+        bg="#2a2a2a", fg="#e0e0e0", fg_dim="#777777", fg_faint="#4a4a4a",
+        accent="#e0af68", selected_bg="#444444", input_bg="#333333",
+        preview="#999999", link="#7aa2f7", code="#a0a0a0",
+    ),
+    "green": _make_theme(
+        bg="#000000", fg="#33ff33", fg_dim="#1a8c1a", fg_faint="#0d4d0d",
+        accent="#66ff66", selected_bg="#003300", input_bg="#001a00",
+        preview="#1aaa1a", link="#99ff99", code="#22cc22",
+    ),
+    "amber": _make_theme(
+        bg="#0d0800", fg="#ffb000", fg_dim="#7a5500", fg_faint="#4d3500",
+        accent="#ffd040", selected_bg="#2a1800", input_bg="#1a1000",
+        preview="#aa7500", link="#ffe080", code="#ddaa00",
+    ),
+}
+THEME_ORDER = ["default", "green", "amber"]
+
 
 def create_app(storage):
     """Build and return the prompt_toolkit Application."""
     state = AppState(storage)
 
-    # Load pinned paths from config
+    # Load pinned paths and theme from config
     cfg = _load_config()
     state.pinned_paths = set(cfg.get("pinned", []))
+    _current_theme = [cfg.get("theme", "default")]
+    if _current_theme[0] not in THEMES:
+        _current_theme[0] = "default"
 
     # Load .bib cache on startup
     state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
@@ -1812,7 +1872,7 @@ def create_app(storage):
     def _get_right_hints():
         S = ("class:hint.sep", "  ·  ")
         hints = [
-            ("class:hint", " (/) search  (e) exports"), S,
+            ("class:hint", " (/) search  (e) exports  (t) theme"), S,
             ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"), S,
         ]
         hints.extend(_get_shutdown_hint())
@@ -1829,7 +1889,7 @@ def create_app(storage):
     def _get_exports_right_hints():
         S = ("class:hint.sep", "  ·  ")
         hints = [
-            ("class:hint", " (/) search  (j) journal"), S,
+            ("class:hint", " (/) search  (j) journal  (t) theme"), S,
             ("class:hint", "(d) delete"), S,
         ]
         hints.extend(_get_shutdown_hint())
@@ -2701,6 +2761,16 @@ def create_app(storage):
         if state.showing_exports:
             toggle_exports()
 
+    @kb.add("t", filter=entry_list_focused)
+    def _(event):
+        idx = THEME_ORDER.index(_current_theme[0])
+        _current_theme[0] = THEME_ORDER[(idx + 1) % len(THEME_ORDER)]
+        event.app.style = PtStyle.from_dict(THEMES[_current_theme[0]])
+        cfg = _load_config()
+        cfg["theme"] = _current_theme[0]
+        _save_config(cfg)
+        show_notification(state, f"Theme: {_current_theme[0]}")
+
     @kb.add("/", filter=entry_list_focused)
     def _(event):
         if state.showing_exports:
@@ -3111,39 +3181,7 @@ def create_app(storage):
 
     # ── Style ────────────────────────────────────────────────────────
 
-    style = PtStyle.from_dict({
-        "": "#e0e0e0 bg:#2a2a2a",
-        "title": "#e0e0e0",
-        "status": "#8a8a8a bg:#333333",
-        "hint": "#777777",
-        "hint.sep": "#4a4a4a",
-        "accent": "#e0af68",
-        "input": "bg:#333333 #e0e0e0",
-        "editor": "",
-        "select-list": "",
-        "select-list.selected": "bg:#444444",
-        "select-list.empty": "#777777",
-        "preview": "#999999",
-        "keybindings-panel": "bg:#2a2a2a",
-        "find-panel": "bg:#2a2a2a",
-        "form-label": "#aaaaaa",
-        "dialog": "#e0e0e0 bg:#2a2a2a",
-        "dialog.body": "#e0e0e0 bg:#2a2a2a",
-        "dialog text-area": "#e0e0e0 bg:#333333",
-        "dialog frame.label": "#e0e0e0 bold",
-        "dialog shadow": "bg:#111111",
-        "button": "#e0e0e0 bg:#555555",
-        "button.focused": "#e0e0e0 bg:#777777",
-        "label": "#e0e0e0",
-        # Markdown inline styles
-        "md.heading-marker": "#666666",
-        "md.heading": "bold #e0af68",
-        "md.bold": "bold",
-        "md.italic": "italic",
-        "md.code": "#a0a0a0",
-        "md.footnote": "#7aa2f7",
-        "md.link": "#7aa2f7",
-    })
+    style = PtStyle.from_dict(THEMES[_current_theme[0]])
 
     # ── Build Application ────────────────────────────────────────────
 

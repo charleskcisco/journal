@@ -2076,9 +2076,14 @@ def create_app(storage):
 
     export_list.on_select = open_export
 
+    # Callable style so the renderer receives resolved hex colors directly,
+    # bypassing class-lookup priority issues with unstyled HSplit parents.
+    def _hbar_style():
+        return THEMES[_current_theme[0]]["hint"]
+
     journal_view = HSplit([
         title_hints_window,
-        Window(height=1, char="─", style="class:hint"),
+        Window(height=1, char="─", style=_hbar_style),
         VSplit([
             HSplit([entry_list], width=D(weight=1)),
             Window(width=1, style="class:hint"),
@@ -2086,15 +2091,15 @@ def create_app(storage):
             Window(width=1, style="class:hint"),
             preview_window,
         ]),
-        Window(height=1, char="─", style="class:hint"),
+        Window(height=1, char="─", style=_hbar_style),
         entry_search,
     ])
 
     exports_view = HSplit([
         exports_title_window,
-        Window(height=1, char="─", style="class:hint"),
+        Window(height=1, char="─", style=_hbar_style),
         export_list,
-        Window(height=1, char="─", style="class:hint"),
+        Window(height=1, char="─", style=_hbar_style),
         export_search,
     ])
 

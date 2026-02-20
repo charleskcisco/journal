@@ -2081,9 +2081,10 @@ def create_app(storage):
         Window(height=1, char="─", style="class:hint"),
         VSplit([
             HSplit([entry_list], width=D(weight=1)),
-            Window(width=1),
-            Window(width=1, char="\u2502", style="class:hint"),
-            Window(width=1),
+            Window(
+                content=FormattedTextControl(lambda: [("class:hint", " \u2502 ")]),
+                width=3,
+            ),
             preview_window,
         ]),
         Window(height=1, char="─", style="class:hint"),
@@ -2766,7 +2767,6 @@ def create_app(storage):
         idx = THEME_ORDER.index(_current_theme[0])
         _current_theme[0] = THEME_ORDER[(idx + 1) % len(THEME_ORDER)]
         event.app.style = PtStyle.from_dict(THEMES[_current_theme[0]])
-        event.app.renderer.reset()
         cfg = _load_config()
         cfg["theme"] = _current_theme[0]
         _save_config(cfg)

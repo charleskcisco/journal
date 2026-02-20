@@ -1183,8 +1183,11 @@ def _clipboard_copy(text):
     if not _CLIP_COPY_CMD:
         return False
     try:
-        subprocess.run(_CLIP_COPY_CMD, input=text, text=True, timeout=1)
-        return True
+        result = subprocess.run(
+            _CLIP_COPY_CMD, input=text, text=True, timeout=1,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return False
 
@@ -1968,8 +1971,7 @@ def create_app(storage):
         state.current_entry = entry
         state.editor_dirty = False
         content = state.storage.read_entry(entry)
-        editor_area.text = content
-        # Place cursor below YAML front matter
+        # Calculate cursor position (below YAML front matter)
         cursor_pos = 0
         if content.startswith("---\n"):
             end = content.find("\n---\n", 4)
@@ -1978,7 +1980,9 @@ def create_app(storage):
                 # Skip trailing blank lines after front matter
                 while cursor_pos < len(content) and content[cursor_pos] == "\n":
                     cursor_pos += 1
-        editor_area.buffer.cursor_position = cursor_pos
+        # reset() loads content and clears the undo/redo stack so
+        # undo in a newly-opened document can't bleed into prior documents.
+        editor_area.buffer.reset(document=Document(content, cursor_pos))
         state.screen = "editor"
         get_app().layout.focus(editor_area.window)
         if state.auto_save_task:
@@ -2094,12 +2098,14 @@ def create_app(storage):
             if start > end:
                 start, end = end, start
             selected = buf.text[start:end]
-            if selected:
-                _clipboard_copy(selected)
-                show_notification(state, "Cut.")
             buf.exit_selection()
-            new_text = buf.text[:start] + buf.text[end:]
-            buf.set_document(Document(new_text, start), bypass_readonly=True)
+            if selected:
+                if _clipboard_copy(selected):
+                    new_text = buf.text[:start] + buf.text[end:]
+                    buf.set_document(Document(new_text, start), bypass_readonly=True)
+                    show_notification(state, "Cut.")
+                else:
+                    show_notification(state, "Clipboard unavailable — text not deleted.")
 
     @_editor_cb_kb.add("c-u")
     def _ctrl_u(event):

@@ -3191,6 +3191,7 @@ def create_app(storage):
                     text = editor_area.buffer.text
                     fm = re.match(r"^---\n.*?\n---\n?", text, re.DOTALL)
                     spell_text = (" " * fm.end() + text[fm.end():]) if fm else text
+                    spell_text = re.sub(r"@\S+", lambda m: " " * len(m.group()), spell_text)
                     try:
                         proc = await asyncio.create_subprocess_exec(
                             "aspell", "list", "--lang=en_US",

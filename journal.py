@@ -3189,6 +3189,8 @@ def create_app(storage):
 
                 async def cmd_spell_check():
                     text = editor_area.buffer.text
+                    fm = re.match(r"^---\n.*?\n---\n?", text, re.DOTALL)
+                    spell_text = (" " * fm.end() + text[fm.end():]) if fm else text
                     try:
                         proc = await asyncio.create_subprocess_exec(
                             "aspell", "list", "--lang=en_US",
@@ -3196,7 +3198,7 @@ def create_app(storage):
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.DEVNULL,
                         )
-                        stdout, _ = await proc.communicate(input=text.encode())
+                        stdout, _ = await proc.communicate(input=spell_text.encode())
                         misspelled = list(set(
                             w for w in stdout.decode().splitlines() if w.strip()
                         ))

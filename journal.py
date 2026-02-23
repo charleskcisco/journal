@@ -968,6 +968,61 @@ class WordWrapProcessor(Processor):
         return Transformation(new_fragments, source_to_display, display_to_source)
 
 
+class ActiveHighlightProcessor(Processor):
+    """Highlights the active find match or current spell-check word in the editor."""
+
+    def __init__(self, state):
+        self._state = state
+
+    def _get_range(self):
+        """Return (abs_pos, abs_end, style_class) or None."""
+        if (self._state.show_spell_panel and self._state.spell_panel
+                and self._state.spell_panel.occurrences):
+            panel = self._state.spell_panel
+            word, pos = panel.occurrences[panel.current_idx]
+            return pos, pos + len(word), "class:spell-error"
+        if (self._state.show_find_panel and self._state.find_panel):
+            fp = self._state.find_panel
+            if fp.matches and 0 <= fp.match_idx < len(fp.matches):
+                pos = fp.matches[fp.match_idx]
+                length = len(fp.search_buf.text)
+                if length > 0:
+                    return pos, pos + length, "class:find-match"
+        return None
+
+    def apply_transformation(self, ti):
+        rng = self._get_range()
+        if rng is None:
+            return Transformation(ti.fragments)
+        abs_pos, abs_end, hl_style = rng
+        doc = ti.document
+        line_start = doc.translate_row_col_to_index(ti.lineno, 0)
+        line_text = ''.join(t for _, t, *__ in ti.fragments)
+        line_end = line_start + len(line_text)
+        if abs_end <= line_start or abs_pos >= line_end:
+            return Transformation(ti.fragments)
+        src_start = max(0, abs_pos - line_start)
+        src_end = min(len(line_text), abs_end - line_start)
+        disp_start = ti.source_to_display(src_start)
+        disp_end = ti.source_to_display(src_end)
+        new_frags = []
+        pos = 0
+        for style, text, *rest in ti.fragments:
+            frag_end = pos + len(text)
+            if frag_end <= disp_start or pos >= disp_end:
+                new_frags.append((style, text) + tuple(rest))
+            else:
+                before = max(pos, disp_start) - pos
+                after = min(frag_end, disp_end) - pos
+                if before > 0:
+                    new_frags.append((style, text[:before]) + tuple(rest))
+                new_frags.append((hl_style, text[before:after]) + tuple(rest))
+                if after < len(text):
+                    new_frags.append((style, text[after:]) + tuple(rest))
+            pos = frag_end
+        return Transformation(new_frags)
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  SelectableList Widget
 # ════════════════════════════════════════════════════════════════════════
@@ -1091,6 +1146,8 @@ class AppState:
         self.last_find_query = ""
         self.show_find_panel = False
         self.find_panel = None
+        self.show_spell_panel = False
+        self.spell_panel = None
         self.shutdown_pending = 0.0
         # .bib cache
         self.bib_entries: list[BibEntry] = []
@@ -1128,6 +1185,7 @@ async def show_dialog_as_float(state, dialog):
     app = get_app()
     focused_before = app.layout.current_window
     app.layout.focus(dialog)
+    app.invalidate()
     result = await dialog.future
     if float_ in state.root_container.floats:
         state.root_container.floats.remove(float_)
@@ -1750,6 +1808,167 @@ class FindReplacePanel:
         return self.container
 
 
+class SpellCheckPanel:
+    """Non-modal side panel for spell checking with suggestions."""
+
+    def __init__(self, occurrences, sugg_map, editor_buf, state, editor_area=None):
+        self.occurrences = list(occurrences)
+        self.sugg_map = sugg_map
+        self.editor_buf = editor_buf
+        self.state = state
+        self.editor_area = editor_area
+        self.current_idx = 0
+
+        self._list = SelectableList(on_select=self._do_replace)
+
+        @self._list._kb.add("escape", eager=True)
+        def _esc(event):
+            self._close()
+
+        @self._list._kb.add("s")
+        def _skip(event):
+            self._next()
+
+        @self._list._kb.add("r")
+        def _replace_r(event):
+            if self._list.items:
+                self._do_replace(self._list.items[self._list.selected_index][0])
+
+        @self._list._kb.add("a")
+        def _add_dict(event):
+            if self.occurrences:
+                word, _ = self.occurrences[self.current_idx]
+                asyncio.ensure_future(self._add_to_dict_async(word))
+
+        def get_header():
+            if not self.occurrences:
+                return [("class:hint", " Done — no more misspellings\n")]
+            word, _ = self.occurrences[self.current_idx]
+            n = self.current_idx + 1
+            total = len(self.occurrences)
+            return [
+                ("class:hint", f" {n}/{total}  "),
+                ("class:accent bold", word),
+                ("", "\n"),
+            ]
+
+        def get_hints():
+            return [
+                ("class:accent bold", "  ret"), ("", "  Replace\n"),
+                ("class:accent bold", "    s"), ("", "  Skip\n"),
+                ("class:accent bold", "    a"), ("", "  Add to dict\n"),
+                ("class:accent bold", "  esc"), ("", "  Close\n"),
+            ]
+
+        self.container = HSplit([
+            Window(FormattedTextControl(get_header), height=1),
+            self._list,
+            Window(height=1),
+            Window(FormattedTextControl(get_hints), height=4),
+        ], width=24, style="class:find-panel")
+
+        self._update_list()
+        if self.occurrences:
+            self._goto_current()
+
+    def _update_list(self):
+        if not self.occurrences:
+            self._list.set_items([])
+            return
+        word, _ = self.occurrences[self.current_idx]
+        suggs = self.sugg_map.get(word.lower(), [])
+        self._list.set_items([(s, s) for s in suggs[:8]])
+        self._list.selected_index = 0
+
+    def _goto_current(self):
+        if not self.occurrences:
+            return
+        _, pos = self.occurrences[self.current_idx]
+        self.editor_buf.cursor_position = pos
+        self._scroll_to_cursor()
+        get_app().invalidate()
+
+    def _scroll_to_cursor(self):
+        if self.editor_area is not None:
+            row = self.editor_buf.document.cursor_position_row
+            window = self.editor_area.window
+            original_scroll = window._scroll
+
+            def _forced_scroll(ui_content, width, height):
+                original_scroll(ui_content, width, height)
+                window.vertical_scroll = row
+                window._scroll = original_scroll
+
+            window._scroll = _forced_scroll
+
+    def _do_replace(self, suggestion):
+        if not self.occurrences:
+            return
+        word, pos = self.occurrences[self.current_idx]
+        text = self.editor_buf.text
+        new_text = text[:pos] + suggestion + text[pos + len(word):]
+        self.editor_buf.set_document(
+            Document(new_text, pos + len(suggestion)), bypass_readonly=True,
+        )
+        diff = len(suggestion) - len(word)
+        new_occurrences = []
+        for i, (w, p) in enumerate(self.occurrences):
+            if i == self.current_idx:
+                continue
+            new_occurrences.append((w, p + diff if i > self.current_idx else p))
+        self.occurrences = new_occurrences
+        if self.current_idx >= len(self.occurrences):
+            self.current_idx = max(0, len(self.occurrences) - 1)
+        self._update_list()
+        if self.occurrences:
+            self._goto_current()
+        else:
+            get_app().invalidate()
+
+    def _next(self):
+        if not self.occurrences:
+            return
+        self.current_idx = (self.current_idx + 1) % len(self.occurrences)
+        self._update_list()
+        self._goto_current()
+
+    async def _add_to_dict_async(self, word):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "aspell", "-a", "--lang=en_US",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.communicate(input=f"*{word}\n#\n".encode())
+        except Exception:
+            pass
+        word_lower = word.lower()
+        self.occurrences = [(w, p) for w, p in self.occurrences
+                            if w.lower() != word_lower]
+        if self.current_idx >= len(self.occurrences):
+            self.current_idx = max(0, len(self.occurrences) - 1)
+        self._update_list()
+        if self.occurrences:
+            self._goto_current()
+        else:
+            get_app().invalidate()
+
+    def _close(self):
+        self.state.show_spell_panel = False
+        try:
+            get_app().layout.focus(self.editor_area)
+        except ValueError:
+            pass
+        get_app().invalidate()
+
+    def is_focused(self):
+        return get_app().layout.current_window is self._list.window
+
+    def __pt_container__(self):
+        return self.container
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  Application
 # ════════════════════════════════════════════════════════════════════════
@@ -1790,6 +2009,8 @@ APP_STYLE = {
     "md.code":                "#a0a0a0",
     "md.footnote":            "#7aa2f7",
     "md.link":                "#7aa2f7",
+    "spell-error":            "bold #ff9999",
+    "find-match":             "bold #e0af68",
 }
 
 
@@ -2089,7 +2310,7 @@ def create_app(storage):
         style="class:editor",
         focus_on_click=True,
         lexer=MarkdownLexer(),
-        input_processors=[WordWrapProcessor()],
+        input_processors=[WordWrapProcessor(), ActiveHighlightProcessor(state)],
     )
     editor_area.buffer.on_text_changed += lambda buf: setattr(state, 'editor_dirty', True)
 
@@ -2212,9 +2433,14 @@ def create_app(storage):
                          f" {state.current_entry.name}")]
         return [("class:status", "")]
 
-    status_bar = Window(
-        FormattedTextControl(get_status_text), height=1, style="class:status",
-    )
+    def get_guide_hint():
+        return [("class:hint", " (^g) guide ")]
+
+    status_bar = VSplit([
+        Window(FormattedTextControl(get_status_text), height=1, style="class:status"),
+        Window(FormattedTextControl(get_guide_hint), height=1,
+               align=WindowAlign.RIGHT, style="class:status", dont_extend_width=True),
+    ])
 
     _KB_ALL = [
         ("esc", "Journal"), ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save"),
@@ -2271,6 +2497,9 @@ def create_app(storage):
 
     def get_editor_body():
         parts = []
+        if state.show_spell_panel and state.spell_panel:
+            parts.append(state.spell_panel)
+            parts.append(Window(width=1, char="\u2502", style="class:hint"))
         if state.show_find_panel and state.find_panel:
             parts.append(state.find_panel)
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
@@ -2427,6 +2656,7 @@ def create_app(storage):
         if state.show_find_panel and state.find_panel:
             state.last_find_query = state.find_panel.search_buf.text
         state.show_find_panel = False
+        state.show_spell_panel = False
         state.screen = "journal"
         state.current_entry = None
         state.showing_exports = False
@@ -2585,6 +2815,11 @@ def create_app(storage):
             if state.show_find_panel and state.find_panel and state.find_panel.is_focused():
                 state.last_find_query = state.find_panel.search_buf.text
                 state.show_find_panel = False
+                event.app.layout.focus(editor_area)
+                event.app.invalidate()
+                return
+            if state.show_spell_panel and state.spell_panel and state.spell_panel.is_focused():
+                state.show_spell_panel = False
                 event.app.layout.focus(editor_area)
                 event.app.invalidate()
                 return
@@ -2952,6 +3187,67 @@ def create_app(storage):
                     except ValueError:
                         pass
 
+                async def cmd_spell_check():
+                    text = editor_area.buffer.text
+                    try:
+                        proc = await asyncio.create_subprocess_exec(
+                            "aspell", "list", "--lang=en_US",
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.DEVNULL,
+                        )
+                        stdout, _ = await proc.communicate(input=text.encode())
+                        misspelled = list(set(
+                            w for w in stdout.decode().splitlines() if w.strip()
+                        ))
+                    except FileNotFoundError:
+                        show_notification(state, "aspell not found — install it to use spell check.")
+                        return
+                    if not misspelled:
+                        show_notification(state, "No misspellings found.")
+                        return
+                    # Get suggestions via aspell -a pipe mode
+                    sugg_map = {}
+                    try:
+                        proc2 = await asyncio.create_subprocess_exec(
+                            "aspell", "-a", "--lang=en_US",
+                            stdin=asyncio.subprocess.PIPE,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.DEVNULL,
+                        )
+                        words_input = "\n".join(misspelled) + "\n"
+                        stdout2, _ = await proc2.communicate(input=words_input.encode())
+                        for line in stdout2.decode().splitlines():
+                            if line.startswith("&"):
+                                parts = line.split()
+                                w = parts[1].lower()
+                                raw = line.split(":", 1)[1] if ":" in line else ""
+                                sugg_map[w] = [s.strip() for s in raw.split(",") if s.strip()]
+                            elif line.startswith("#"):
+                                parts = line.split()
+                                if len(parts) >= 2:
+                                    sugg_map[parts[1].lower()] = []
+                    except Exception:
+                        pass
+                    # Find all occurrences sorted by position
+                    occurrences = []
+                    for word in misspelled:
+                        for match in re.finditer(
+                            r'\b' + re.escape(word) + r'\b', text, re.IGNORECASE
+                        ):
+                            occurrences.append((match.group(), match.start()))
+                    occurrences.sort(key=lambda x: x[1])
+                    panel = SpellCheckPanel(
+                        occurrences, sugg_map, editor_area.buffer, state, editor_area
+                    )
+                    state.spell_panel = panel
+                    state.show_spell_panel = True
+                    get_app().invalidate()
+                    try:
+                        get_app().layout.focus(panel._list.window)
+                    except ValueError:
+                        pass
+
                 cmds = [
                     ("Export", "Export document", cmd_export),
                     ("Find", "^F", cmd_find),
@@ -2961,6 +3257,7 @@ def create_app(storage):
                     ("Keybindings", "^G", toggle_keybindings),
                     ("Return to journal", "Esc", return_to_journal),
                     ("Save", "^S", lambda: do_save()),
+                    ("Spell check", "Check spelling", cmd_spell_check),
                 ]
             else:
                 cmds = [

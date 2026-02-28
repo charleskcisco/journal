@@ -1,8 +1,6 @@
 # Journal---a writerdeck-compatible companion for your Obsidian vault 
 
-![PXL_20260215_210709684](https://github.com/user-attachments/assets/c1d0cc66-68d1-4fe3-a967-05bf44961b97)
-
-![PXL_20260215_210658640](https://github.com/user-attachments/assets/7f9084b5-5ca3-4c06-9540-73a36168e6df)
+![PXL_20260228_183048976 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/49905aeb-76f3-44e9-90d2-085d4d30f1a4)
 
 ## About
 One simple idea undergirds Journal, a terminal-based Markdown editor built on prompt_toolkit: my Obsidian vault should stretch across different devices. Obsidian, as an Electron application, works best in a standard desktop environment; but sometimes  I don't want a standard desktop environment. Different devices offer other computing paradigms with distinct benefits. One device category in particular, the writerdeck, overlaps in functionality with Obsidian, but with its stripped down operating system cannot run that application effectively. Thus, I designed Journal as a CLI text editor for reading and writing `.md` files directly in my synced vault directory.
@@ -42,17 +40,26 @@ By default, Journal reads `.md` files from `~/Documents/`---just plain Markdown 
 ## Specifics
 Journal conforms to my vault, where I use a relatively minimal set of plugins for academic writing and note taking. Hence, its features, split between the Journal and the Editor, are as follows:
 
-- Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, or shut down your writerdeck (assuming you're on a Linux-powered system with auto-login enabled).
-- From the Journal, you can also view a list of and print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below).
-- Once you enter the Editor screen, you may edit your document (surprise again) in the markdown syntax. 
-- As in Obsidian, you can use ctrl+p to open a command palette, from which you can access a host of features (most of those are also available via a set of Journal-specific keybindings).
+Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, or shut down your writerdeck (assuming you're on a Linux-powered system with auto-login enabled).
+
+![PXL_20260228_183048976 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/49905aeb-76f3-44e9-90d2-085d4d30f1a4)
+
+From the Journal, you can also view a list of and print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below).
+
+![PXL_20260228_183251729 PORTRAIT](https://github.com/user-attachments/assets/5c5546a0-5817-4814-be3b-4de780de1ca0)
+
+![PXL_20260228_183309047 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/ee1b486d-4cc3-40bb-9400-8e32b8dc88e5)
+
+Once you enter the Editor screen, you may edit your document (surprise again) in the markdown syntax.
+
+![PXL_20260228_183059253 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/3ed1b280-6801-4e55-ac56-2415a93eed43)
+
+As in Obsidian, you can use ctrl+p to open a command palette, from which you can access a host of features (most of those are also available via a set of Journal-specific keybindings).
 
 Let me talk about these features and their bindings in more detail (organized from least to most interesting, for whimsy's sake).
 
 ### Keybindings guide (ctrl+g)---the epitome of boring, as most essential things are
 This opens a panel on the right that serves as a guide for the keybindings below. It can stay open as you edit as a reference if needed.
-
-![PXL_20260215_210719197](https://github.com/user-attachments/assets/55e3e881-b969-427e-91a8-d2130c6c6b15)
 
 ### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
@@ -72,7 +79,12 @@ Word counts are a necessary evil (maybe), but they do prompt some really poor be
 ### Find and/or replace (ctrl+f)---this placement was less about how interesting it is in principle and more about how hard it was to theorize and implement.
 Journal offers (if I may say so myself) a relatively robust find and replace feature. Ctrl+f summons a panel in which you may type a particular word. At that point, you have a choice. Enter will send you into the editor pane and highlight the term you sought. You can cycle through results with ctrl+k (next) and ctrl+j (previous), and you can return to the find panel with ctrl+f, from which you can then also replace that word you sought or replace every instance of it in your document.
 
-![PXL_20260215_210757382](https://github.com/user-attachments/assets/ec115020-c86a-47a8-ad09-5cfcee50b5f0)
+![PXL_20260228_183205214 PORTRAIT](https://github.com/user-attachments/assets/747cc519-8033-4a70-b933-278b3e7eb6ad)
+
+### Spell check (palette only)---not everyone is a natural at this nonsense
+Spelling is hard (for most people...I hear), so hearing the cries of the masses I implemented a spell check. It uses aspell as a backend and can be triggered from the command palette. It follows the logic of the find/replace dialogue; when triggered, it scans the whole document and runs through mispellings one at a time, highlighting them in a harsh but fitting red, suggesting replacements, and offering options to skip or add to dictionary.
+
+![PXL_20260228_183227329 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/1f2a4365-d697-4f02-bb8c-65feb823fd65)
 
 ### Return to Journal (esc)---the pressing twice thing makes this fascinating if you mull it over.
 If you press escape (twice to prevent accidental activation), you'll return to the Journal screen.

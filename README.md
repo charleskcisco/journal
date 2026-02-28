@@ -1,6 +1,6 @@
 # Journal---a writerdeck-compatible companion for your Obsidian vault 
 
-![PXL_20260228_183048976 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/49905aeb-76f3-44e9-90d2-085d4d30f1a4)
+<img width="1280" height="400" alt="screenshot_20260228_143656" src="https://github.com/user-attachments/assets/de477a9f-d190-4fc8-b9c1-65802c082b43" />
 
 ## About
 One simple idea undergirds Journal, a terminal-based Markdown editor built on prompt_toolkit: my Obsidian vault should stretch across different devices. Obsidian, as an Electron application, works best in a standard desktop environment; but sometimes  I don't want a standard desktop environment. Different devices offer other computing paradigms with distinct benefits. One device category in particular, the writerdeck, overlaps in functionality with Obsidian, but with its stripped down operating system cannot run that application effectively. Thus, I designed Journal as a CLI text editor for reading and writing `.md` files directly in my synced vault directory.
@@ -42,24 +42,28 @@ Journal conforms to my vault, where I use a relatively minimal set of plugins fo
 
 Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, or shut down your writerdeck (assuming you're on a Linux-powered system with auto-login enabled).
 
-![PXL_20260228_183048976 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/49905aeb-76f3-44e9-90d2-085d4d30f1a4)
+<img width="1280" height="400" alt="screenshot_20260228_143656" src="https://github.com/user-attachments/assets/3a1479cc-5e74-49d6-ae64-d49198504c71" />
 
 From the Journal, you can also view a list of and print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below).
 
-![PXL_20260228_183251729 PORTRAIT](https://github.com/user-attachments/assets/5c5546a0-5817-4814-be3b-4de780de1ca0)
+<img width="1280" height="400" alt="screenshot_20260228_143701" src="https://github.com/user-attachments/assets/a45c3b48-6105-4202-9a7b-e8546ddab4d3" />
 
-![PXL_20260228_183309047 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/ee1b486d-4cc3-40bb-9400-8e32b8dc88e5)
+<img width="1280" height="400" alt="screenshot_20260228_143705" src="https://github.com/user-attachments/assets/c78f46da-32aa-438a-9853-f5fe9790b96e" />
 
 Once you enter the Editor screen, you may edit your document (surprise again) in the markdown syntax.
 
-![PXL_20260228_183059253 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/3ed1b280-6801-4e55-ac56-2415a93eed43)
+<img width="1280" height="400" alt="screenshot_20260228_143644" src="https://github.com/user-attachments/assets/e172901f-c75c-4c36-a09e-818de154649b" />
 
 As in Obsidian, you can use ctrl+p to open a command palette, from which you can access a host of features (most of those are also available via a set of Journal-specific keybindings).
+
+<img width="1280" height="400" alt="screenshot_20260228_143718" src="https://github.com/user-attachments/assets/49b0a202-ce18-45a3-aff4-7ce2e968cc52" />
 
 Let me talk about these features and their bindings in more detail (organized from least to most interesting, for whimsy's sake).
 
 ### Keybindings guide (ctrl+g)---the epitome of boring, as most essential things are
 This opens a panel on the right that serves as a guide for the keybindings below. It can stay open as you edit as a reference if needed.
+
+<img width="1280" height="400" alt="screenshot_20260228_143848" src="https://github.com/user-attachments/assets/381358f4-f0f9-47f1-a3a5-236640af1674" />
 
 ### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
@@ -79,12 +83,12 @@ Word counts are a necessary evil (maybe), but they do prompt some really poor be
 ### Find and/or replace (ctrl+f)---this placement was less about how interesting it is in principle and more about how hard it was to theorize and implement.
 Journal offers (if I may say so myself) a relatively robust find and replace feature. Ctrl+f summons a panel in which you may type a particular word. At that point, you have a choice. Enter will send you into the editor pane and highlight the term you sought. You can cycle through results with ctrl+k (next) and ctrl+j (previous), and you can return to the find panel with ctrl+f, from which you can then also replace that word you sought or replace every instance of it in your document.
 
-![PXL_20260228_183205214 PORTRAIT](https://github.com/user-attachments/assets/747cc519-8033-4a70-b933-278b3e7eb6ad)
+<img width="1280" height="400" alt="screenshot_20260228_143732" src="https://github.com/user-attachments/assets/e845b296-d1e1-40cf-8477-9d7716f59118" />
 
 ### Spell check (palette only)---not everyone is a natural at this nonsense
 Spelling is hard (for most people...I hear), so hearing the cries of the masses I implemented a spell check. It uses aspell as a backend and can be triggered from the command palette. It follows the logic of the find/replace dialogue; when triggered, it scans the whole document and runs through mispellings one at a time, highlighting them in a harsh but fitting red, suggesting replacements, and offering options to skip or add to dictionary.
 
-![PXL_20260228_183227329 PORTRAIT ORIGINAL](https://github.com/user-attachments/assets/1f2a4365-d697-4f02-bb8c-65feb823fd65)
+<img width="1280" height="400" alt="screenshot_20260228_143803" src="https://github.com/user-attachments/assets/62f04de2-db6d-40dd-86f2-2eaf594f82df" />
 
 ### Return to Journal (esc)---the pressing twice thing makes this fascinating if you mull it over.
 If you press escape (twice to prevent accidental activation), you'll return to the Journal screen.
@@ -101,9 +105,9 @@ The next two features are related. First, ctrl+n offers a quick and frictionless
 ### Search for and insert citekey (ctrl+r)---this will revolutionize your academic writing once you figure out how to implement it. Even if you don't like Journal, you should get this into your workflow.
 Ctrl+r will open a pop-up from which you can fuzzy search your .bib file in `~/Documents/sources/` (exported from a robust Zotero library, I'm guessing, you studious guy or gal, you) and insert a citekey at your cursor. That plus pandoc's --citeproc flag (more on that below) revolutionized citation workflow for me. You have got to try it.
 
-![PXL_20260215_211150347](https://github.com/user-attachments/assets/91ba3a21-e1e3-4f3e-aa5e-72326165fb40)
+<img width="1280" height="400" alt="screenshot_20260228_143822" src="https://github.com/user-attachments/assets/452e05be-51fa-4e33-9870-6b809e54eaf7" />
 
-![PXL_20260215_211158401](https://github.com/user-attachments/assets/b5df651e-cab4-4f79-9adc-f1c82177df8a)
+<img width="1280" height="400" alt="screenshot_20260228_143827" src="https://github.com/user-attachments/assets/97c25cf4-6549-46ba-9595-c2b6eb59428b" />
 
 ### Insert frontmatter (palette only)---YAML is an old trick, but here it's used for a very specific function.
 This will insert at the top of the document the frontmatter relevant to the export function. I reckon title, author, instructor, and date are pretty self-explanatory, or will be once you understand how this feature works. Style accepts one of two case sensitive inputs: "chicago" and "mla". Spacing, likewise, accepts "single" or "double". You can also add your own frontmatter elements, the most relevant of which might be "bibliography", "csl", and "tags". Now to talk about the final feature in this section.
@@ -130,6 +134,8 @@ csl: /home/username/documents/sources/chicago.csl
 
 ### Export (palette only)---this is basically its own app, frankly.
 This feature uses pandoc and libreoffice in the background to produce a .pdf formatted for submission in academic contexts. Pulling from the frontmatter, pandoc shapes your .md into a .docx formatted according to either Chicago style (with a title page containing your title, author, instructor, and date and page numbers centered in the footer with the final word of the author field appended to the front) or MLA (with a header on the first page according to MLA standards and page numbers on the top right). These can be either single- or double-spaced. Then, if you selected the .pdf output, it will use libreoffice to headlessly convert the .docx into a .pdf. You can either print these outputs from the exports screen or access them via your synced vault on your PC.
+
+<img width="1280" height="400" alt="screenshot_20260228_143723" src="https://github.com/user-attachments/assets/bea304c7-05cb-4277-95ea-b86a8664c393" />
 
 If you used a .bib, you can add "bibliography" and "csl" fields to the YAML and trigger pandoc's --citeproc, which will convert your citekeys to properly formatted citations and add a bibliography to your work.
 

@@ -1223,11 +1223,12 @@ def _detect_clipboard():
     ]
     for copy_cmd, paste_cmd in candidates:
         try:
-            subprocess.run(
+            result = subprocess.run(
                 copy_cmd, input="", text=True, timeout=1,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
-            return copy_cmd, paste_cmd
+            if result.returncode == 0:
+                return copy_cmd, paste_cmd
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             continue
     return None, None
@@ -2333,8 +2334,10 @@ def create_app(storage):
                 start, end = end, start
             selected = buf.text[start:end]
             if selected:
-                _clipboard_copy(selected)
-                show_notification(state, "Copied.")
+                if _clipboard_copy(selected):
+                    show_notification(state, "Copied.")
+                else:
+                    show_notification(state, "Clipboard unavailable.")
             buf.exit_selection()
 
     @_editor_cb_kb.add("c-a")
@@ -3063,6 +3066,20 @@ def create_app(storage):
     def _(event):
         editor_area.buffer.exit_selection()
         editor_area.buffer.cursor_right()
+
+    @kb.add("<any>", filter=is_editor & no_float & editor_has_selection)
+    def _(event):
+        if not event.data or not event.data.isprintable():
+            return
+        buf = editor_area.buffer
+        start = buf.selection_state.original_cursor_position
+        end = buf.cursor_position
+        if start > end:
+            start, end = end, start
+        buf.exit_selection()
+        buf.set_document(Document(buf.text[:start] + buf.text[end:], start),
+                         bypass_readonly=True)
+        buf.insert_text(event.data)
 
     @kb.add("c-z", filter=is_editor & no_float)
     def _(event):

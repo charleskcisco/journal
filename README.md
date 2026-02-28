@@ -24,11 +24,13 @@ Alternatively, the writer could design an entirely new system with the principle
 
 - Python 3.9+
 - prompt_toolkit
+- pygments
+- aspell
 
 ## First-time use
 
 ```bash
-git clone
+git clone https://github.com/charleskcisco/journal.git
 chmod +x setup.sh run.sh
 ./setup.sh     # creates venv, installs prompt_toolkit and other dependencies
 JOURNAL_VAULT=~/notes ./run.sh         # custom vault directory
@@ -86,7 +88,7 @@ Journal offers (if I may say so myself) a relatively robust find and replace fea
 <img width="1280" height="400" alt="screenshot_20260228_143732" src="https://github.com/user-attachments/assets/e845b296-d1e1-40cf-8477-9d7716f59118" />
 
 ### Spell check (palette only)---not everyone is a natural at this nonsense
-Spelling is hard (for most people...I hear), so hearing the cries of the masses I implemented a spell check. It uses aspell as a backend and can be triggered from the command palette. It follows the logic of the find/replace dialogue; when triggered, it scans the whole document and runs through mispellings one at a time, highlighting them in a harsh but fitting red, suggesting replacements, and offering options to skip or add to dictionary.
+Spelling is hard (for most people...I hear), so hearing the cries of the masses I implemented a spell check. It uses aspell as a backend and can be triggered from the command palette. It follows the logic of the find/replace dialogue; when triggered, it scans the whole document and runs through misspellings one at a time, highlighting them in a harsh but fitting red, suggesting replacements, and offering options to skip or add to dictionary.
 
 <img width="1280" height="400" alt="screenshot_20260228_143803" src="https://github.com/user-attachments/assets/62f04de2-db6d-40dd-86f2-2eaf594f82df" />
 

@@ -124,6 +124,7 @@ class VaultStorage:
 # ════════════════════════════════════════════════════════════════════════
 
 _REFS_DIR = Path(__file__).resolve().parent / "refs"
+_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "screenshots"
 _DEFAULT_SPACING = "double"
 
 
@@ -1176,6 +1177,18 @@ def show_notification(state, message, duration=3.0):
             get_app().invalidate()
 
     state.notification_task = asyncio.ensure_future(_clear())
+
+
+def take_screenshot() -> Optional[Path]:
+    """Capture the screen to the screenshots folder; return the saved path or None."""
+    _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = _SCREENSHOTS_DIR / f"screenshot_{ts}.png"
+    try:
+        subprocess.run(["scrot", str(dest)], check=True, timeout=10)
+        return dest
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return None
 
 
 async def show_dialog_as_float(state, dialog):
@@ -2465,6 +2478,7 @@ def create_app(storage):
         ("^up", "Go to top"), ("^dn", "Go to bottom"),
         ("^w", "Cycle word/¶/off"),
         ("^g", "Show keybindings"), ("^s", "Shut down"),
+        ("F12", "Screenshot"),
     ]
 
     def get_keybindings_text():
@@ -2859,6 +2873,14 @@ def create_app(storage):
         else:
             state.quit_pending = now
             show_notification(state, "Press ^q again to quit.", duration=2.0)
+
+    @kb.add("f12")
+    def _(event):
+        path = take_screenshot()
+        if path:
+            show_notification(state, f"Screenshot saved: {path.name}")
+        else:
+            show_notification(state, "Screenshot failed (scrot not available).")
 
     # -- Journal screen --
     @kb.add("n", filter=entry_list_focused)

@@ -2367,8 +2367,7 @@ def create_app(storage):
                     buf.set_document(Document(new_text, start), bypass_readonly=True)
                     show_notification(state, "Cut.")
                 else:
-                    cmd = _CLIP_COPY_CMD[0] if _CLIP_COPY_CMD else "none"
-                    show_notification(state, f"Clipboard unavailable [{cmd}] — text not deleted.")
+                    show_notification(state, "Clipboard unavailable — text not deleted.")
 
     @_editor_cb_kb.add("backspace")
     def _backspace(event):

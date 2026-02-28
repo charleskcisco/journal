@@ -1185,7 +1185,7 @@ def take_screenshot() -> Optional[Path]:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = _SCREENSHOTS_DIR / f"screenshot_{ts}.png"
     try:
-        subprocess.run(["scrot", str(dest)], check=True, timeout=10)
+        subprocess.run(["grim", str(dest)], check=True, timeout=10)
         return dest
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return None
@@ -2880,7 +2880,7 @@ def create_app(storage):
         if path:
             show_notification(state, f"Screenshot saved: {path.name}")
         else:
-            show_notification(state, "Screenshot failed (scrot not available).")
+            show_notification(state, "Screenshot failed (grim not available).")
 
     # -- Journal screen --
     @kb.add("n", filter=entry_list_focused)

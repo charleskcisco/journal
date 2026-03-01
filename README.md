@@ -197,4 +197,4 @@ cups, cups-client, lpr, python, prompt_toolkit, ttf-mscorefonts-installer (look 
 MIT
 
 ## Plug
-If you find my work helpful, consider [buying me a beer](https://buymeacoffee.com/charlescisco).
+If you find my work helpful, please consider [buying me a beer](https://buymeacoffee.com/charlescisco).

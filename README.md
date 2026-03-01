@@ -20,25 +20,6 @@ At that point, the writer has two choices---well this writer had two choices. Th
 
 Alternatively, the writer could design an entirely new system with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Raspberry Pi Zero 2 W or similar hardware---to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
 
-## Dependencies
-
-- Python 3.9+
-- prompt_toolkit
-- pygments
-- aspell
-
-## First-time use
-
-```bash
-git clone https://github.com/charleskcisco/journal.git
-chmod +x setup.sh run.sh
-./setup.sh     # creates venv, installs prompt_toolkit and other dependencies
-JOURNAL_VAULT=~/notes ./run.sh         # custom vault directory
-./run.sh       # launches journal
-```
-
-By default, Journal reads `.md` files from `~/Documents/`---just plain Markdown files compatible with Obsidian and any other editor. Exports go to `~/Documents/pdf/` and `~/Documents/docx/`.
-
 ## Specifics
 Journal conforms to my vault, where I use a relatively minimal set of plugins for academic writing and note taking. Hence, its features, split between the Journal and the Editor, are as follows:
 
@@ -173,6 +154,25 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | Ctrl+Y   | Redo                                 |
 | Ctrl+Z   | Undo                                 |
 | Esc (x2) | Return to file browser               |
+
+## Dependencies
+
+- Python 3.9+
+- prompt_toolkit
+- pygments
+- aspell
+
+## First-time use
+
+```bash
+git clone https://github.com/charleskcisco/journal.git
+chmod +x setup.sh run.sh
+./setup.sh     # creates venv, installs prompt_toolkit and other dependencies
+JOURNAL_VAULT=~/notes ./run.sh         # custom vault directory
+./run.sh       # launches journal
+```
+
+By default, Journal reads `.md` files from `~/Documents/`---just plain Markdown files compatible with Obsidian and any other editor. Exports go to `~/Documents/pdf/` and `~/Documents/docx/`.
 
 ## Advanced set-up (some of which, alas, requires explanation)
 To make the most of Journal, you'll need the following:

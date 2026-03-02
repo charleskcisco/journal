@@ -194,7 +194,7 @@ Syncthing is not bundled with this application. You'll have to install it on bot
 cups, cups-client, lpr, python, prompt_toolkit, ttf-mscorefonts-installer (look it up if you have trouble with this)
 
 ## License
-MIT
+GPL-3.0
 
 ## Plug
 If you find my work helpful, please consider [buying me a beer](https://buymeacoffee.com/charlescisco).

@@ -2032,7 +2032,7 @@ class SpellCheckPanel:
 # ════════════════════════════════════════════════════════════════════════
 
 
-_FRONTMATTER_PROPS = ["title", "author", "instructor", "date", "spacing", "style"]
+_FRONTMATTER_PROPS = ["title", "author", "instructor", "course", "date", "spacing", "style"]
 
 # ── Style ────────────────────────────────────────────────────────────────
 
@@ -3447,7 +3447,7 @@ def create_app(storage):
     def _(event):
         now = time.monotonic()
         if now - state.shutdown_pending < 2.0:
-            subprocess.Popen(['sudo', 'shutdown', 'now'])
+            subprocess.Popen(['shutdown', '-h', 'now'])
             event.app.exit()
         else:
             state.shutdown_pending = now

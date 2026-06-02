@@ -156,8 +156,9 @@ class VaultStorage:
 #  PDF Export Helpers
 # ════════════════════════════════════════════════════════════════════════
 
-_REFS_DIR = Path(__file__).resolve().parent / "refs"
-_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "screenshots"
+_APP_DIR = Path(__file__).resolve().parent
+_REFS_DIR = _APP_DIR / "refs"
+_SCREENSHOTS_DIR = _APP_DIR / "screenshots"
 _DEFAULT_SPACING = "double"
 
 
@@ -1184,6 +1185,11 @@ class AppState:
         self.show_spell_panel = False
         self.spell_panel = None
         self.shutdown_pending = 0.0
+        # Self-update (git checkout only)
+        self.update_available = False
+        self.update_count = 0
+        self.update_pending = 0.0
+        self.update_check_task = None
         # .bib cache
         self.bib_entries: list[BibEntry] = []
         self.bib_path: Optional[Path] = None
@@ -1296,31 +1302,65 @@ def _detect_clipboard():
 _CLIP_COPY_CMD, _CLIP_PASTE_CMD = _detect_clipboard()
 
 
-def _clipboard_copy(text):
-    """Copy text to system clipboard."""
+def _redetect_clipboard():
+    """Re-run detection and refresh the cached clipboard commands."""
+    global _CLIP_COPY_CMD, _CLIP_PASTE_CMD
+    _CLIP_COPY_CMD, _CLIP_PASTE_CMD = _detect_clipboard()
+
+
+def _try_copy(text):
     if not _CLIP_COPY_CMD:
         return False
     try:
         result = subprocess.run(
-            _CLIP_COPY_CMD, input=text, text=True, timeout=1,
+            _CLIP_COPY_CMD, input=text, text=True, timeout=2,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (OSError, subprocess.SubprocessError):
         return False
 
 
-def _clipboard_paste():
-    """Get text from system clipboard."""
+def _try_paste():
     if not _CLIP_PASTE_CMD:
         return None
     try:
-        result = subprocess.run(_CLIP_PASTE_CMD, capture_output=True, text=True, timeout=1)
+        result = subprocess.run(
+            _CLIP_PASTE_CMD, capture_output=True, text=True, timeout=2)
         if result.returncode == 0:
             return result.stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (OSError, subprocess.SubprocessError):
         pass
     return None
+
+
+def _clipboard_copy(text):
+    """Copy text to the system clipboard.
+
+    On failure, re-detect the clipboard tool and retry once, so a
+    transient wl-copy/xclip hiccup doesn't require a reboot. Re-detection
+    is safe here because we immediately re-copy the real text afterward.
+    """
+    if _try_copy(text):
+        return True
+    _redetect_clipboard()
+    return _try_copy(text)
+
+
+def _clipboard_paste():
+    """Get text from the system clipboard, retrying once on failure.
+
+    Note: we retry the *same* paste command rather than re-detecting,
+    because detection writes an empty string to the clipboard (wl-copy
+    "") and would wipe the very content we're trying to read. Only if no
+    paste tool was ever found do we re-detect (nothing to clobber).
+    """
+    result = _try_paste()
+    if result is not None:
+        return result
+    if _CLIP_PASTE_CMD is None:
+        _redetect_clipboard()
+    return _try_paste()
 
 
 def _para_count(text):
@@ -1451,6 +1491,101 @@ class ExportFormatDialog:
     def _select(self, fmt):
         if not self.future.done():
             self.future.set_result(fmt)
+
+    def cancel(self):
+        if not self.future.done():
+            self.future.set_result(None)
+
+    def __pt_container__(self):
+        return self.dialog
+
+
+MARKDOWN_CHEAT_SHEET = """\
+Markdown Cheat Sheet
+
+Headings
+  # H1
+  ## H2
+  ### H3
+
+Emphasis
+  **bold text**
+  *italicized text*
+  ~~strikethrough~~
+
+Lists
+  - Unordered item
+  1. Ordered item
+
+Blockquote
+  > blockquote
+
+Code
+  `inline code`
+
+  ```
+  fenced code block
+  ```
+
+Link & Image
+  [link text](https://example.com)
+  ![alt text](image.png)
+
+Horizontal Rule
+  ---
+
+Table
+  | Header | Title |
+  | ------ | ----- |
+  | Cell   | Cell  |
+
+Footnote
+  Sentence with a footnote.[^1]
+  [^1]: This is the footnote.
+
+Task List
+  - [x] Done
+  - [ ] Todo
+"""
+
+
+class MarkdownHelpDialog:
+    """Read-only, scrollable Markdown syntax reference (palette only)."""
+
+    def __init__(self):
+        self.future = asyncio.Future()
+
+        def _close():
+            if not self.future.done():
+                self.future.set_result(None)
+
+        self.body = TextArea(
+            text=MARKDOWN_CHEAT_SHEET,
+            read_only=True,
+            scrollbar=True,
+            wrap_lines=False,
+            focusable=True,
+            height=D(preferred=20, max=28),
+        )
+        # The TextArea's BufferControl swallows escape, so bind dismissal
+        # locally (escape / q / enter) rather than relying on the global
+        # handler. Arrow/page keys still scroll the body.
+        kb = KeyBindings()
+
+        @kb.add("escape", eager=True)
+        @kb.add("q")
+        @kb.add("enter")
+        def _(event):
+            _close()
+
+        self.body.control.key_bindings = kb
+        self.dialog = Dialog(
+            title="Markdown reference",
+            body=self.body,
+            buttons=[Button(text="Close", handler=_close)],
+            modal=True,
+            width=D(preferred=64, max=72),
+        )
 
     def cancel(self):
         if not self.future.done():
@@ -2475,12 +2610,20 @@ def create_app(storage):
     # its own status bar). Hidden unless there is a message to show, so it
     # surfaces things like print results that would otherwise be invisible
     # here. Reused across all four layouts -- only one is active at a time.
+    def _journal_status_text():
+        if state.notification:
+            return [("class:status", f" {state.notification}")]
+        if state.update_available:
+            return [("class:accent",
+                     " Update available — press ^u to install & restart")]
+        return []
+
     journal_status_window = ConditionalContainer(
         Window(
-            FormattedTextControl(
-                lambda: [("class:status", f" {state.notification}")]),
+            FormattedTextControl(_journal_status_text),
             height=1, style="class:status"),
-        filter=Condition(lambda: bool(state.notification)),
+        filter=Condition(
+            lambda: bool(state.notification) or state.update_available),
     )
 
     journal_view = HSplit([
@@ -2874,6 +3017,38 @@ def create_app(storage):
                 get_app().invalidate()
 
     state.vault_watch_task = None
+
+    # ── Self-update check (once, on boot) ────────────────────────────
+    async def update_check_once():
+        # Only meaningful for a git checkout. Runs git fetch + counts how
+        # many commits the upstream is ahead, off the UI thread and with
+        # timeouts so it never blocks startup or hangs when offline.
+        if not (_APP_DIR / ".git").is_dir():
+            return
+        if os.environ.get("JOURNAL_NO_UPDATE_CHECK"):
+            return
+        loop = asyncio.get_running_loop()
+
+        def _count_behind():
+            try:
+                subprocess.run(
+                    ["git", "-C", str(_APP_DIR), "fetch", "--quiet"],
+                    capture_output=True, timeout=20)
+                r = subprocess.run(
+                    ["git", "-C", str(_APP_DIR), "rev-list", "--count",
+                     "HEAD..@{u}"],
+                    capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    return int((r.stdout or "0").strip() or "0")
+            except (OSError, subprocess.SubprocessError, ValueError):
+                return None
+            return None
+
+        n = await loop.run_in_executor(None, _count_behind)
+        if n and n > 0:
+            state.update_available = True
+            state.update_count = n
+            get_app().invalidate()
 
     # ── Export pipeline ──────────────────────────────────────────────
 
@@ -3270,15 +3445,26 @@ def create_app(storage):
 
         asyncio.ensure_future(_do())
 
+    def _selected_entry():
+        # Resolve the highlighted entry from the DISPLAY list, which is
+        # ordered pinned-first by refresh_entries. Indexing
+        # fuzzy_filter_entries() directly would use storage order and act
+        # on the wrong file whenever a pin is set.
+        idx = entry_list.selected_index
+        if idx >= len(entry_list.items):
+            return None
+        path_str = entry_list.items[idx][0]
+        if path_str == "__empty__":
+            return None
+        return next((e for e in state.entries if str(e.path) == path_str), None)
+
     @kb.add("r", filter=entry_list_focused)
     def _(event):
         if state.showing_exports:
             return
-        filtered = fuzzy_filter_entries(state.entries, entry_search.text)
-        idx = entry_list.selected_index
-        if idx >= len(filtered):
+        entry = _selected_entry()
+        if not entry:
             return
-        entry = filtered[idx]
 
         async def _do():
             dlg = InputDialog(title="Rename", label_text="New name:",
@@ -3313,11 +3499,9 @@ def create_app(storage):
 
             asyncio.ensure_future(_do())
             return
-        filtered = fuzzy_filter_entries(state.entries, entry_search.text)
-        idx = entry_list.selected_index
-        if idx >= len(filtered):
+        entry = _selected_entry()
+        if not entry:
             return
-        entry = filtered[idx]
 
         async def _do():
             dlg = ConfirmDialog(f"Delete '{entry.name}'?")
@@ -3334,11 +3518,9 @@ def create_app(storage):
     def _(event):
         if state.showing_exports:
             return
-        filtered = fuzzy_filter_entries(state.entries, entry_search.text)
-        idx = entry_list.selected_index
-        if idx >= len(filtered):
+        entry = _selected_entry()
+        if not entry:
             return
-        entry = filtered[idx]
         # Generate copy name: "Name (copy)", "Name (copy 2)", etc.
         base = entry.name
         copy_name = f"{base} (copy)"
@@ -3356,14 +3538,9 @@ def create_app(storage):
     def _(event):
         if state.showing_exports:
             return
-        filtered = fuzzy_filter_entries(state.entries, entry_search.text)
-        idx = entry_list.selected_index
-        if idx >= len(filtered):
+        entry = _selected_entry()
+        if not entry:
             return
-        pinned = [e for e in filtered if e.name in state.pinned_paths]
-        unpinned = [e for e in filtered if e.name not in state.pinned_paths]
-        ordered = pinned + unpinned
-        entry = ordered[idx]
         if entry.name in state.pinned_paths:
             state.pinned_paths.discard(entry.name)
             show_notification(state, f"Unpinned '{entry.name}'.")
@@ -3452,6 +3629,22 @@ def create_app(storage):
         else:
             state.shutdown_pending = now
             show_notification(state, "Press ^s again to shut down.", duration=2.0)
+
+    @kb.add("c-u", filter=is_journal & no_float)
+    def _(event):
+        if not state.update_available:
+            show_notification(state, "Journal is up to date.")
+            return
+        now = time.monotonic()
+        if now - state.update_pending < 2.0:
+            state.update_pending = 0.0
+            # Signal the launcher (run.sh) to pull + relaunch. main()
+            # translates this result into exit code 42.
+            event.app.exit(result="update")
+        else:
+            state.update_pending = now
+            show_notification(
+                state, "Press ^u again to update & restart.", duration=2.0)
 
     # -- Editor screen --
     @kb.add("c-s", filter=is_editor & no_float)
@@ -3684,6 +3877,9 @@ def create_app(storage):
                     except ValueError:
                         pass
 
+                async def cmd_markdown_help():
+                    await show_dialog_as_float(state, MarkdownHelpDialog())
+
                 cmds = [
                     ("Export", "Export document", cmd_export),
                     ("Find", "^F", cmd_find),
@@ -3691,6 +3887,7 @@ def create_app(storage):
                     ("Insert frontmatter", "YAML frontmatter", do_insert_frontmatter),
                     ("Insert citation", "^R", cmd_cite),
                     ("Keybindings", "^G", toggle_keybindings),
+                    ("Markdown reference", "Syntax help", cmd_markdown_help),
                     ("Return to journal", "Esc", return_to_journal),
                     ("Save", "^S", lambda: do_save()),
                     ("Spell check", "Check spelling", cmd_spell_check),
@@ -3910,9 +4107,11 @@ def create_app(storage):
 
     def _start_background_tasks():
         # Called by app.run(pre_run=...) once the event loop is running,
-        # so ensure_future has a loop to attach the watcher to.
+        # so ensure_future has a loop to attach the tasks to.
         if state.vault_watch_task is None or state.vault_watch_task.done():
             state.vault_watch_task = asyncio.ensure_future(vault_watch_loop())
+        if state.update_check_task is None or state.update_check_task.done():
+            state.update_check_task = asyncio.ensure_future(update_check_once())
 
     app.start_background_tasks = _start_background_tasks
 
@@ -3976,7 +4175,12 @@ def main() -> None:
         pass
 
     app = create_app(VaultStorage(data_dir))
-    app.run(pre_run=getattr(app, "start_background_tasks", None))
+    result = app.run(pre_run=getattr(app, "start_background_tasks", None))
+    # Exit code 42 tells the launcher (run.sh) to pull the update and
+    # relaunch. Every other exit (^Q quit, ^S shutdown, crash) returns
+    # normally, so the launcher loop just ends -- nothing auto-relaunches.
+    if result == "update":
+        sys.exit(42)
 
 
 if __name__ == "__main__":

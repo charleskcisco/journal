@@ -2621,10 +2621,13 @@ def create_app(storage):
          ("^r", "Cite"), ("^f", "Find/Replace")],
         [("^z", "Undo"), ("^y", "Redo")],
     ]
+    # Keep descriptions <= 15 chars so each line ( 5 for the key + 2
+    # spaces + desc) fits the narrow 22-column guide panel without being
+    # clipped at the screen edge.
     _KB_EXTRAS = [
         ("^up", "Go to top"), ("^dn", "Go to bottom"),
-        ("^w", "Cycle word/¶/off"),
-        ("^g", "Show keybindings"), ("^s", "Shut down"),
+        ("^w", "Word/¶/off"),
+        ("^g", "Keybindings"), ("^s", "Shut down"),
         ("F12", "Screenshot"),
     ]
 
@@ -3348,6 +3351,10 @@ def create_app(storage):
     @kb.add("down", filter=export_search_focused)
     def _(event):
         event.app.layout.focus(export_list.window)
+
+    @kb.add("escape", filter=search_focused, eager=True)
+    def _(event):
+        event.app.layout.focus(entry_list.window)
 
     @kb.add("down", filter=search_focused)
     def _(event):

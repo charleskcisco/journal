@@ -1245,20 +1245,28 @@ async def show_dialog_as_float(state, dialog):
 
 
 def _detect_printers():
-    """Return list of available printer names via lpstat."""
-    try:
-        result = subprocess.run(
-            ["lpstat", "-a"], capture_output=True, text=True, timeout=5,
-        )
+    """Return available CUPS destination names.
+
+    Tries `lpstat -e` (lists every configured destination, one name per
+    line) first, then `lpstat -a` (printers accepting jobs). The first
+    token of each line is the printer name in both formats.
+    """
+    names = []
+    for args in (["lpstat", "-e"], ["lpstat", "-a"]):
+        try:
+            result = subprocess.run(
+                args, capture_output=True, text=True, timeout=5)
+        except Exception:
+            continue
         if result.returncode != 0 or not result.stdout.strip():
-            return []
-        return [
-            line.split()[0]
-            for line in result.stdout.strip().splitlines()
-            if line.split()
-        ]
-    except Exception:
-        return []
+            continue
+        for line in result.stdout.strip().splitlines():
+            parts = line.split()
+            if parts and parts[0] not in names:
+                names.append(parts[0])
+        if names:
+            break
+    return names
 
 
 def _detect_clipboard():
@@ -2443,24 +2451,28 @@ def create_app(storage):
         if path_str == "__empty__":
             return
         path = Path(path_str)
-        if path.suffix.lower() in (".pdf", ".docx"):
-            printers = _detect_printers()
-            if printers:
-                asyncio.ensure_future(_print_export(path, printers))
-                return
+        printers = _detect_printers()
+        if not printers:
+            # The exports screen is print-only; do NOT fall back to a GUI
+            # opener (that just launches LibreOffice on a writerdeck).
             show_notification(
-                state, "No printers found (is CUPS running?).")
-        # No printers, or some other file type: open in the default app
-        # (useful on a desktop; a no-op on a headless writerdeck).
-        try:
-            if sys.platform == "darwin":
-                subprocess.Popen(["open", str(path)])
-            else:
-                subprocess.Popen(["xdg-open", str(path)])
-        except Exception:
-            pass
+                state, "No printer found. Configure one in CUPS to print.")
+            return
+        asyncio.ensure_future(_print_export(path, printers))
 
     export_list.on_select = open_export
+
+    # Notification line for the journal/exports screens (the editor has
+    # its own status bar). Hidden unless there is a message to show, so it
+    # surfaces things like print results that would otherwise be invisible
+    # here. Reused across all four layouts -- only one is active at a time.
+    journal_status_window = ConditionalContainer(
+        Window(
+            FormattedTextControl(
+                lambda: [("class:status", f" {state.notification}")]),
+            height=1, style="class:status"),
+        filter=Condition(lambda: bool(state.notification)),
+    )
 
     journal_view = HSplit([
         title_hints_window,
@@ -2474,6 +2486,7 @@ def create_app(storage):
         ]),
         Window(height=1, char="─", style="class:hint"),
         entry_search,
+        journal_status_window,
     ])
 
     exports_view = HSplit([
@@ -2482,6 +2495,7 @@ def create_app(storage):
         export_list,
         Window(height=1, char="─", style="class:hint"),
         export_search,
+        journal_status_window,
     ])
 
     # Narrow variants reuse the same widget instances (entry_list,
@@ -2495,6 +2509,7 @@ def create_app(storage):
         Window(height=1, char="─", style="class:hint"),
         entry_search,
         browser_footer_window,
+        journal_status_window,
     ])
 
     exports_view_narrow = HSplit([
@@ -2504,6 +2519,7 @@ def create_app(storage):
         Window(height=1, char="─", style="class:hint"),
         export_search,
         exports_footer_window,
+        journal_status_window,
     ])
 
     def get_journal_screen():

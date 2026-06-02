@@ -72,18 +72,28 @@ class VaultStorage:
         self.pdf_dir.mkdir(parents=True, exist_ok=True)
         self.docx_dir.mkdir(parents=True, exist_ok=True)
 
-    def list_entries(self) -> list[Entry]:
-        """List .md files recursively, sorted by modified desc."""
+    def iter_md_paths(self):
+        """Yield the .md files that belong in the vault listing.
+
+        Skips hidden files, files inside hidden directories (e.g.
+        Syncthing's .stversions/.stfolder), and the pdf/docx export
+        dirs. Shared by list_entries and the background vault watcher so
+        both agree on exactly which files count.
+        """
         skip_dirs = {self.pdf_dir, self.docx_dir}
-        entries = []
         for p in self.vault_dir.rglob("*.md"):
             if p.name.startswith("."):
                 continue
-            # Skip files under pdf/, docx/, or hidden directories
             if any(part.startswith(".") for part in p.relative_to(self.vault_dir).parts[:-1]):
                 continue
             if any(p.is_relative_to(sd) for sd in skip_dirs):
                 continue
+            yield p
+
+    def list_entries(self) -> list[Entry]:
+        """List .md files recursively, sorted by modified desc."""
+        entries = []
+        for p in self.iter_md_paths():
             rel = p.relative_to(self.vault_dir).with_suffix("")
             entries.append(Entry(
                 path=p, name=str(rel),
@@ -1142,6 +1152,7 @@ class AppState:
         self.editor_dirty = False
         self.root_container = None
         self.auto_save_task = None
+        self.vault_watch_task = None
         self.export_paths = []
         self.show_word_count = 2  # 0=words, 1=paragraphs, 2=off
         self.last_find_query = ""
@@ -2564,13 +2575,103 @@ def create_app(storage):
                 await loop.run_in_executor(
                     None, state.storage.save_entry, state.current_entry, content)
 
+    # ── Background vault watcher ─────────────────────────────────────
+    # Syncthing (or any external process) can add, remove, or rewrite
+    # files in the vault while Journal sits idle on the list screen --
+    # e.g. right after boot, when Syncthing is still pulling in the
+    # background. Poll the vault on a timer and refresh the visible list
+    # only when its on-disk signature actually changes, so the list is
+    # never stuck showing a stale snapshot.
+
+    _watch_sig = {"md": None, "exports": None}
+
+    def _vault_signature(paths):
+        # Cheap fingerprint of a set of files: path + mtime + size.
+        # Changes whenever a file is added, removed, or rewritten.
+        sig = []
+        for p in paths:
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            sig.append((str(p), st.st_mtime_ns, st.st_size))
+        sig.sort()
+        return tuple(sig)
+
+    def _md_signature():
+        try:
+            return _vault_signature(state.storage.iter_md_paths())
+        except OSError:
+            return None
+
+    def _exports_signature():
+        paths = []
+        for d in (state.storage.pdf_dir, state.storage.docx_dir):
+            if d.is_dir():
+                for ext in ("*.pdf", "*.docx"):
+                    paths.extend(d.glob(ext))
+        return _vault_signature(paths)
+
+    def _refresh_preserving_selection(widget, do_refresh, query):
+        # Keep the cursor on the same file across a background refresh,
+        # even though the list re-sorts by modified-time and an incoming
+        # file may jump to the top.
+        prev_id = None
+        if widget.items and widget.selected_index < len(widget.items):
+            prev_id = widget.items[widget.selected_index][0]
+        do_refresh(query)
+        if prev_id is not None:
+            for i, item in enumerate(widget.items):
+                if item[0] == prev_id:
+                    widget.selected_index = i
+                    break
+
+    async def vault_watch_loop():
+        # Prime signatures so the first tick doesn't trigger a redundant
+        # refresh (the initial list is already built at startup).
+        _watch_sig["md"] = _md_signature()
+        _watch_sig["exports"] = _exports_signature()
+        loop = asyncio.get_running_loop()
+        while True:
+            await asyncio.sleep(30)
+            # Only touch the list while it's the active screen; never
+            # disturb the editor buffer or fight with an open dialog.
+            if state.screen != "journal":
+                continue
+            changed = False
+            try:
+                if state.showing_exports:
+                    cur = await loop.run_in_executor(None, _exports_signature)
+                    if cur != _watch_sig["exports"]:
+                        _watch_sig["exports"] = cur
+                        _refresh_preserving_selection(
+                            export_list, refresh_exports, export_search.text)
+                        changed = True
+                else:
+                    cur = await loop.run_in_executor(None, _md_signature)
+                    if cur is not None and cur != _watch_sig["md"]:
+                        _watch_sig["md"] = cur
+                        _refresh_preserving_selection(
+                            entry_list, refresh_entries, entry_search.text)
+                        update_preview()
+                        changed = True
+            except OSError:
+                continue
+            if changed:
+                get_app().invalidate()
+
+    state.vault_watch_task = None
+
     # ── Export pipeline ──────────────────────────────────────────────
 
     async def run_export(export_format):
         entry = state.current_entry
         if not entry:
             return
-        safe_name = entry.name or "export"
+        # Export to a flat file named only for the note itself, dropping
+        # any subfolder path (entry.name may be "folder/sub/note"). This
+        # keeps exports in the flat pdf/ and docx/ dirs the browser scans.
+        safe_name = entry.path.stem or "export"
         content = editor_area.text
         loop = asyncio.get_running_loop()
 
@@ -3518,6 +3619,14 @@ def create_app(storage):
     )
     app.ttimeoutlen = 0.05
 
+    def _start_background_tasks():
+        # Called by app.run(pre_run=...) once the event loop is running,
+        # so ensure_future has a loop to attach the watcher to.
+        if state.vault_watch_task is None or state.vault_watch_task.done():
+            state.vault_watch_task = asyncio.ensure_future(vault_watch_loop())
+
+    app.start_background_tasks = _start_background_tasks
+
     return app
 
 
@@ -3578,7 +3687,7 @@ def main() -> None:
         pass
 
     app = create_app(VaultStorage(data_dir))
-    app.run()
+    app.run(pre_run=getattr(app, "start_background_tasks", None))
 
 
 if __name__ == "__main__":

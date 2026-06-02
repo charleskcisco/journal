@@ -2191,10 +2191,10 @@ def create_app(storage):
             ("class:hint", "exports"),
         ]
 
-    # Narrow top-right hints. The browser puts the exports mode-switch up
-    # top alongside refresh/shutdown; the exports view is already in
-    # exports, so it shows only refresh/shutdown. (The wide view keeps its
-    # crowded top bar unchanged to avoid overflow; ^r still works there.)
+    # Narrow top-right hints. Each view puts its mode-switch up top
+    # alongside refresh/shutdown: the browser shows (e) exports, the
+    # exports view shows (j) journal. (The wide view keeps its crowded top
+    # bar unchanged to avoid overflow; ^r still works there.)
     def _get_narrow_browser_right_hints():
         S = ("class:hint.sep", "  ·  ")
         hints = [("class:hint", "(e) exports"), S,
@@ -2203,18 +2203,27 @@ def create_app(storage):
         return hints
 
     def _get_narrow_exports_right_hints():
-        hints = [("class:hint", "(^r) refresh"), ("class:hint.sep", "  ·  ")]
+        S = ("class:hint.sep", "  ·  ")
+        hints = [("class:hint", "(j) journal"), S,
+                 ("class:hint", "(^r) refresh"), S]
         hints.extend(_get_shutdown_hint())
         return hints
 
-    # Narrow footer: per-item actions only. The browser footer drops
-    # (e) exports (now in the top bar); the wide top bar still shows it
-    # via the shared _browser_action_hints.
+    # Narrow footers: per-item actions only. They drop the mode-switch
+    # hint (now in the top bar); the wide top bars still show it via the
+    # shared _browser_action_hints / _exports_action_hints.
     def _browser_footer_hints_narrow():
         S = ("class:hint.sep", "  ·  ")
         return [
             ("class:hint", " (/) search"), S,
             ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"),
+        ]
+
+    def _exports_footer_hints_narrow():
+        S = ("class:hint.sep", "  ·  ")
+        return [
+            ("class:hint", " (/) search"), S,
+            ("class:hint", "(↵) print  (d) delete"),
         ]
 
     narrow_title_window = VSplit([
@@ -2233,7 +2242,7 @@ def create_app(storage):
         content=FormattedTextControl(_browser_footer_hints_narrow),
         height=1, style="class:hint")
     exports_footer_window = Window(
-        content=FormattedTextControl(_exports_action_hints),
+        content=FormattedTextControl(_exports_footer_hints_narrow),
         height=1, style="class:hint")
 
     _preview_cache = {"path": None, "content": ""}

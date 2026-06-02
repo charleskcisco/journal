@@ -63,6 +63,26 @@ class BibEntry:
 # ════════════════════════════════════════════════════════════════════════
 
 
+def _ensure_writable(d: "Path") -> bool:
+    """Ensure directory d exists and is writable, repairing perms if needed.
+
+    Export dirs can end up read-only (e.g. 0555) on some setups — notably
+    Syncthing-managed folders — which makes pandoc/LibreOffice fail to
+    write output. Add owner rwx so exports can land there.
+    """
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    if os.access(d, os.W_OK):
+        return True
+    try:
+        d.chmod(d.stat().st_mode | 0o700)  # ensure owner read/write/exec
+    except OSError:
+        pass
+    return os.access(d, os.W_OK)
+
+
 class VaultStorage:
     def __init__(self, vault_dir: Path):
         self.vault_dir = vault_dir
@@ -71,6 +91,9 @@ class VaultStorage:
         self.vault_dir.mkdir(parents=True, exist_ok=True)
         self.pdf_dir.mkdir(parents=True, exist_ok=True)
         self.docx_dir.mkdir(parents=True, exist_ok=True)
+        # Repair read-only export dirs so exports can be written.
+        _ensure_writable(self.pdf_dir)
+        _ensure_writable(self.docx_dir)
 
     def iter_md_paths(self):
         """Yield the .md files that belong in the vault listing.
@@ -2837,6 +2860,15 @@ def create_app(storage):
                 return log.name
             except OSError:
                 return None
+
+        # The export target dir must be writable. It can be read-only on
+        # some setups (e.g. Syncthing-managed folders) -- LibreOffice/pandoc
+        # then fail with an I/O access-denied error. Repair it, or report
+        # clearly rather than failing deep in a subprocess.
+        if not _ensure_writable(export_dir):
+            show_notification(
+                state, f"Export folder not writable: {_fmt_dest(export_dir)}")
+            return
 
         tmp_dir = tempfile.mkdtemp(prefix="journal_export_")
         md_path = Path(tmp_dir) / "source.md"

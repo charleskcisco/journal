@@ -2082,6 +2082,17 @@ def create_app(storage):
         style="class:input",
     )
 
+    # Below this terminal width (in columns) the browser/exports screens
+    # switch to a narrow, Manuscripts-style layout: a single full-width
+    # list with no preview pane, a breadcrumb top bar, and the action
+    # hints moved to a footer. (Terminals report size in columns, not
+    # pixels.) shutil.get_terminal_size is the app's existing responsive
+    # signal -- see the editor margins below.
+    _NARROW_COLS = 120
+
+    def _is_narrow():
+        return shutil.get_terminal_size().columns < _NARROW_COLS
+
     def _get_title_hints():
         return [("class:title bold", " Journal")]
 
@@ -2093,12 +2104,26 @@ def create_app(storage):
             return [("class:accent bold", " (^s) press again to shut down ")]
         return [("class:hint", " (^s) shut down ")]
 
-    def _get_right_hints():
+    # Action-hint segments shared by the wide top bar (right-aligned,
+    # with the shutdown hint appended) and the narrow footer bar
+    # (left-aligned, no shutdown hint).
+    def _browser_action_hints():
         S = ("class:hint.sep", "  ·  ")
-        hints = [
+        return [
             ("class:hint", " (/) search  (e) exports"), S,
-            ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"), S,
+            ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"),
         ]
+
+    def _exports_action_hints():
+        S = ("class:hint.sep", "  ·  ")
+        return [
+            ("class:hint", " (/) search  (j) journal"), S,
+            ("class:hint", "(d) delete"),
+        ]
+
+    def _get_right_hints():
+        hints = _browser_action_hints()
+        hints.append(("class:hint.sep", "  ·  "))
         hints.extend(_get_shutdown_hint())
         return hints
 
@@ -2111,11 +2136,8 @@ def create_app(storage):
         return [("class:title bold", " Exports")]
 
     def _get_exports_right_hints():
-        S = ("class:hint.sep", "  ·  ")
-        hints = [
-            ("class:hint", " (/) search  (j) journal"), S,
-            ("class:hint", "(d) delete"), S,
-        ]
+        hints = _exports_action_hints()
+        hints.append(("class:hint.sep", "  ·  "))
         hints.extend(_get_shutdown_hint())
         return hints
 
@@ -2123,6 +2145,49 @@ def create_app(storage):
         Window(content=FormattedTextControl(_get_exports_title), height=1),
         Window(content=FormattedTextControl(_get_exports_right_hints), height=1, align=WindowAlign.RIGHT),
     ])
+
+    # ── Narrow (Manuscripts-style) browser/exports chrome ────────────
+
+    def _get_narrow_title():
+        return [
+            ("class:title bold", " Journal"),
+            ("class:hint.sep", "  ·  "),
+            ("class:hint", "journal"),
+        ]
+
+    def _get_narrow_exports_title():
+        return [
+            ("class:title bold", " Journal"),
+            ("class:hint.sep", "  ·  "),
+            ("class:hint", "exports"),
+        ]
+
+    # Narrow top-right: a force-refresh hint alongside the shutdown hint.
+    # (The wide view keeps its crowded top bar unchanged to avoid overflow;
+    # ^r still works there, it's just not advertised.)
+    def _get_narrow_right_hints():
+        hints = [("class:hint", "(^r) refresh"), ("class:hint.sep", "  ·  ")]
+        hints.extend(_get_shutdown_hint())
+        return hints
+
+    narrow_title_window = VSplit([
+        Window(content=FormattedTextControl(_get_narrow_title), height=1),
+        Window(content=FormattedTextControl(_get_narrow_right_hints), height=1,
+               align=WindowAlign.RIGHT),
+    ])
+
+    narrow_exports_title_window = VSplit([
+        Window(content=FormattedTextControl(_get_narrow_exports_title), height=1),
+        Window(content=FormattedTextControl(_get_narrow_right_hints), height=1,
+               align=WindowAlign.RIGHT),
+    ])
+
+    browser_footer_window = Window(
+        content=FormattedTextControl(_browser_action_hints),
+        height=1, style="class:hint")
+    exports_footer_window = Window(
+        content=FormattedTextControl(_exports_action_hints),
+        height=1, style="class:hint")
 
     _preview_cache = {"path": None, "content": ""}
     preview_buffer = Buffer(name="preview_buffer", read_only=True)
@@ -2322,10 +2387,33 @@ def create_app(storage):
         export_search,
     ])
 
+    # Narrow variants reuse the same widget instances (entry_list,
+    # entry_search, export_list, export_search) -- only one of the
+    # wide/narrow trees is ever returned per render, so sharing the
+    # Window objects is safe and keeps focus/key handling unchanged.
+    journal_view_narrow = HSplit([
+        narrow_title_window,
+        Window(height=1, char="─", style="class:hint"),
+        entry_list,
+        Window(height=1, char="─", style="class:hint"),
+        entry_search,
+        browser_footer_window,
+    ])
+
+    exports_view_narrow = HSplit([
+        narrow_exports_title_window,
+        Window(height=1, char="─", style="class:hint"),
+        export_list,
+        Window(height=1, char="─", style="class:hint"),
+        export_search,
+        exports_footer_window,
+    ])
+
     def get_journal_screen():
+        narrow = _is_narrow()
         if state.showing_exports:
-            return exports_view
-        return journal_view
+            return exports_view_narrow if narrow else exports_view
+        return journal_view_narrow if narrow else journal_view
 
     journal_screen = DynamicContainer(get_journal_screen)
 
@@ -3113,6 +3201,20 @@ def create_app(storage):
     def _(event):
         if state.showing_exports:
             toggle_exports()
+
+    @kb.add("c-r", filter=is_journal & no_float)
+    def _(event):
+        # Force an immediate re-scan of the vault, independent of the
+        # 30s background watcher. Works whether the list or its search
+        # box is focused, on both the journal and exports lists.
+        if state.showing_exports:
+            refresh_exports(export_search.text)
+        else:
+            refresh_entries(entry_search.text)
+            update_preview()
+        # The list visibly updating is the feedback; the browser screen
+        # has no status bar to surface a notification.
+        event.app.invalidate()
 
 
     @kb.add("/", filter=entry_list_focused)

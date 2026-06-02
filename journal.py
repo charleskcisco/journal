@@ -1453,7 +1453,12 @@ class ExportFormatDialog:
 
 
 class PrinterPickerDialog:
-    """Pick a printer from available system printers."""
+    """Pick a printer from available system printers.
+
+    Resolves its future with the chosen printer name (or None if
+    cancelled). The actual printing is done by the caller so it can
+    convert/await and report errors.
+    """
 
     def __init__(self, printers, file_path):
         self.future = asyncio.Future()
@@ -1469,7 +1474,7 @@ class PrinterPickerDialog:
             self.cancel()
 
         self.dialog = Dialog(
-            title="Print to",
+            title=f"Print {file_path.name} to",
             body=HSplit([self.list]),
             buttons=[Button(text="Cancel", handler=self.cancel)],
             modal=True,
@@ -1477,13 +1482,6 @@ class PrinterPickerDialog:
         )
 
     def _select(self, printer):
-        try:
-            subprocess.Popen([
-                "lp", "-d", printer, "-o", "sides=two-sided-long-edge",
-                str(self.file_path),
-            ])
-        except Exception:
-            pass
         if not self.future.done():
             self.future.set_result(printer)
 
@@ -2141,7 +2139,7 @@ def create_app(storage):
         S = ("class:hint.sep", "  ·  ")
         return [
             ("class:hint", " (/) search  (j) journal"), S,
-            ("class:hint", "(d) delete"),
+            ("class:hint", "(↵) print  (d) delete"),
         ]
 
     def _get_right_hints():
@@ -2389,20 +2387,71 @@ def create_app(storage):
 
     entry_list.on_select = open_entry
 
+    async def _print_export(path, printers):
+        # Ask which printer, then print. .pdf prints directly; .docx is
+        # first converted to PDF via LibreOffice (lp/CUPS can't render
+        # docx). lp is awaited so any temp PDF is safe to delete only
+        # after the job has been spooled.
+        dlg = PrinterPickerDialog(printers, path)
+        printer = await show_dialog_as_float(state, dlg)
+        if not printer:
+            return
+        loop = asyncio.get_running_loop()
+        to_print = path
+        tmp_dir = None
+        try:
+            if path.suffix.lower() == ".docx":
+                lo = detect_libreoffice()
+                if not lo:
+                    show_notification(
+                        state, "Install LibreOffice to print .docx files.")
+                    return
+                show_notification(
+                    state, "Preparing document for printing…", duration=60)
+                tmp_dir = tempfile.mkdtemp(prefix="journal_print_")
+                lo_profile = Path(tmp_dir) / "loprofile"
+                lo_args = [
+                    lo, f"-env:UserInstallation=file://{lo_profile}",
+                    "--headless", "--norestore", "--convert-to", "pdf",
+                    "--outdir", tmp_dir, str(path),
+                ]
+                r = await loop.run_in_executor(
+                    None, lambda: subprocess.run(
+                        lo_args, capture_output=True, text=True, timeout=120))
+                to_print = Path(tmp_dir) / f"{path.stem}.pdf"
+                if r.returncode != 0 or not to_print.exists():
+                    show_notification(
+                        state, "Print failed: could not convert .docx to PDF.")
+                    return
+            show_notification(state, f"Printing on {printer}…", duration=60)
+            r = await loop.run_in_executor(
+                None, lambda: subprocess.run(
+                    ["lp", "-d", printer, "-o", "sides=two-sided-long-edge",
+                     str(to_print)],
+                    capture_output=True, text=True, timeout=30))
+            if r.returncode != 0:
+                err = (r.stderr or r.stdout or "").strip().splitlines()
+                msg = err[-1][:60] if err else "lp error"
+                show_notification(state, f"Print failed: {msg}")
+                return
+            show_notification(state, f"Sent to {printer}.")
+        finally:
+            if tmp_dir:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
     def open_export(path_str):
         if path_str == "__empty__":
             return
         path = Path(path_str)
-        if path.suffix.lower() == ".pdf":
+        if path.suffix.lower() in (".pdf", ".docx"):
             printers = _detect_printers()
             if printers:
-                async def _show():
-                    dlg = PrinterPickerDialog(printers, path)
-                    result = await show_dialog_as_float(state, dlg)
-                    if result:
-                        show_notification(state, f"Sent to {result}.")
-                asyncio.ensure_future(_show())
+                asyncio.ensure_future(_print_export(path, printers))
                 return
+            show_notification(
+                state, "No printers found (is CUPS running?).")
+        # No printers, or some other file type: open in the default app
+        # (useful on a desktop; a no-op on a headless writerdeck).
         try:
             if sys.platform == "darwin":
                 subprocess.Popen(["open", str(path)])

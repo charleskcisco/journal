@@ -2817,6 +2817,27 @@ def create_app(storage):
             except ValueError:
                 return str(p)
 
+        def _log_export_error(stage, cmd, result):
+            # The on-screen notification is fleeting and truncated on a
+            # writerdeck. Write the full command, exit code, and output to
+            # a log in the vault (which the user browses) so failures are
+            # actually diagnosable. Returns the log filename, or None.
+            try:
+                log = state.storage.vault_dir / "export-error.log"
+                log.write_text(
+                    f"Journal export failed\n"
+                    f"stage:   {stage}\n"
+                    f"format:  {export_format}\n"
+                    f"note:    {safe_name}\n"
+                    f"command:\n  {' '.join(str(c) for c in cmd)}\n"
+                    f"returncode: {result.returncode}\n"
+                    f"--- stdout ---\n{result.stdout or ''}\n"
+                    f"--- stderr ---\n{result.stderr or ''}\n",
+                    encoding="utf-8")
+                return log.name
+            except OSError:
+                return None
+
         tmp_dir = tempfile.mkdtemp(prefix="journal_export_")
         md_path = Path(tmp_dir) / "source.md"
         lua_path = Path(tmp_dir) / "filter.lua"
@@ -2846,8 +2867,10 @@ def create_app(storage):
             # failures on minimal devices become visible.
             if result.returncode != 0 or not docx_path.exists():
                 err = (result.stderr or result.stdout or "").strip()
-                tail = err.splitlines()[-1][:90] if err else "no output file produced"
-                show_notification(state, f"Export failed (pandoc): {tail}")
+                tail = err.splitlines()[-1][:70] if err else "no output file produced"
+                log = _log_export_error("pandoc", pandoc_args, result)
+                suffix = f" (see {log})" if log else ""
+                show_notification(state, f"Export failed (pandoc): {tail}{suffix}")
                 return
 
             steps = "2/3" if export_format == "pdf" else "2/2"
@@ -2880,9 +2903,11 @@ def create_app(storage):
                     lo_args, capture_output=True, text=True, timeout=120))
             if result.returncode != 0 or not pdf_path.exists():
                 err = (result.stderr or result.stdout or "").strip()
-                tail = (err.splitlines()[-1][:90] if err
+                tail = (err.splitlines()[-1][:70] if err
                         else "LibreOffice ran but produced no PDF")
-                show_notification(state, f"Export failed (LibreOffice): {tail}")
+                log = _log_export_error("libreoffice", lo_args, result)
+                suffix = f" (see {log})" if log else ""
+                show_notification(state, f"Export failed (LibreOffice): {tail}{suffix}")
                 return
             show_notification(state, f"Exported: {_fmt_dest(pdf_path)}")
 

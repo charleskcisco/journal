@@ -2162,28 +2162,46 @@ def create_app(storage):
             ("class:hint", "exports"),
         ]
 
-    # Narrow top-right: a force-refresh hint alongside the shutdown hint.
-    # (The wide view keeps its crowded top bar unchanged to avoid overflow;
-    # ^r still works there, it's just not advertised.)
-    def _get_narrow_right_hints():
+    # Narrow top-right hints. The browser puts the exports mode-switch up
+    # top alongside refresh/shutdown; the exports view is already in
+    # exports, so it shows only refresh/shutdown. (The wide view keeps its
+    # crowded top bar unchanged to avoid overflow; ^r still works there.)
+    def _get_narrow_browser_right_hints():
+        S = ("class:hint.sep", "  ·  ")
+        hints = [("class:hint", "(e) exports"), S,
+                 ("class:hint", "(^r) refresh"), S]
+        hints.extend(_get_shutdown_hint())
+        return hints
+
+    def _get_narrow_exports_right_hints():
         hints = [("class:hint", "(^r) refresh"), ("class:hint.sep", "  ·  ")]
         hints.extend(_get_shutdown_hint())
         return hints
 
+    # Narrow footer: per-item actions only. The browser footer drops
+    # (e) exports (now in the top bar); the wide top bar still shows it
+    # via the shared _browser_action_hints.
+    def _browser_footer_hints_narrow():
+        S = ("class:hint.sep", "  ·  ")
+        return [
+            ("class:hint", " (/) search"), S,
+            ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"),
+        ]
+
     narrow_title_window = VSplit([
         Window(content=FormattedTextControl(_get_narrow_title), height=1),
-        Window(content=FormattedTextControl(_get_narrow_right_hints), height=1,
+        Window(content=FormattedTextControl(_get_narrow_browser_right_hints), height=1,
                align=WindowAlign.RIGHT),
     ])
 
     narrow_exports_title_window = VSplit([
         Window(content=FormattedTextControl(_get_narrow_exports_title), height=1),
-        Window(content=FormattedTextControl(_get_narrow_right_hints), height=1,
+        Window(content=FormattedTextControl(_get_narrow_exports_right_hints), height=1,
                align=WindowAlign.RIGHT),
     ])
 
     browser_footer_window = Window(
-        content=FormattedTextControl(_browser_action_hints),
+        content=FormattedTextControl(_browser_footer_hints_narrow),
         height=1, style="class:hint")
     exports_footer_window = Window(
         content=FormattedTextControl(_exports_action_hints),
@@ -2269,7 +2287,14 @@ def create_app(storage):
             q = query.lower()
             filtered = [f for f in files if q in f.name.lower()]
         if not files:
-            export_list.set_items([("__empty__", "No exports yet.")])
+            # Show where we're scanning so an empty list reveals which
+            # vault the app is using (exports go to <vault>/pdf and /docx).
+            try:
+                where = "~/" + str(state.storage.vault_dir.relative_to(Path.home()))
+            except ValueError:
+                where = str(state.storage.vault_dir)
+            export_list.set_items(
+                [("__empty__", f"No exports yet — looking in {where}/pdf and /docx")])
         elif not filtered:
             export_list.set_items([("__empty__", "No matching exports.")])
         else:
@@ -2784,6 +2809,14 @@ def create_app(storage):
             show_notification(state, "No reference .docx found in refs/ directory.")
             return
 
+        def _fmt_dest(p):
+            # Show where the export landed so it's findable. Prefer a
+            # ~-relative path (shorter, recognizable); fall back to absolute.
+            try:
+                return "~/" + str(p.relative_to(Path.home()))
+            except ValueError:
+                return str(p)
+
         tmp_dir = tempfile.mkdtemp(prefix="journal_export_")
         md_path = Path(tmp_dir) / "source.md"
         lua_path = Path(tmp_dir) / "filter.lua"
@@ -2808,8 +2841,13 @@ def create_app(storage):
             result = await loop.run_in_executor(
                 None, lambda: subprocess.run(
                     pandoc_args, capture_output=True, text=True, timeout=60))
-            if result.returncode != 0:
-                show_notification(state, "Export failed: pandoc error")
+            # Trust the output file, not just the exit code: a tool can
+            # exit 0 yet write nothing. Surface the real error so silent
+            # failures on minimal devices become visible.
+            if result.returncode != 0 or not docx_path.exists():
+                err = (result.stderr or result.stdout or "").strip()
+                tail = err.splitlines()[-1][:90] if err else "no output file produced"
+                show_notification(state, f"Export failed (pandoc): {tail}")
                 return
 
             steps = "2/3" if export_format == "pdf" else "2/2"
@@ -2821,21 +2859,32 @@ def create_app(storage):
                 pass
 
             if export_format == "docx":
-                show_notification(state, f"Exported: {docx_path.name}")
+                show_notification(state, f"Exported: {_fmt_dest(docx_path)}")
                 return
 
             show_notification(state, "Exporting\u2026 (3/3) Converting to PDF", duration=60)
+            # Give LibreOffice a private, writable profile under the temp
+            # dir. Headless soffice commonly exits 0 while producing no
+            # output when its default user profile is missing or locked
+            # (typical on minimal/writerdeck Linux) -- a dedicated profile
+            # avoids that. Longer timeout for slow hardware (Pi cold start).
+            lo_profile = Path(tmp_dir) / "loprofile"
             lo_args = [
-                libreoffice, "--headless", "--convert-to", "pdf",
+                libreoffice,
+                f"-env:UserInstallation=file://{lo_profile}",
+                "--headless", "--norestore", "--convert-to", "pdf",
                 "--outdir", str(export_dir), str(docx_path),
             ]
             result = await loop.run_in_executor(
                 None, lambda: subprocess.run(
-                    lo_args, capture_output=True, text=True, timeout=60))
-            if result.returncode != 0:
-                show_notification(state, "Export failed: LibreOffice error")
+                    lo_args, capture_output=True, text=True, timeout=120))
+            if result.returncode != 0 or not pdf_path.exists():
+                err = (result.stderr or result.stdout or "").strip()
+                tail = (err.splitlines()[-1][:90] if err
+                        else "LibreOffice ran but produced no PDF")
+                show_notification(state, f"Export failed (LibreOffice): {tail}")
                 return
-            show_notification(state, f"Exported: {pdf_path.name}")
+            show_notification(state, f"Exported: {_fmt_dest(pdf_path)}")
 
         except subprocess.TimeoutExpired:
             show_notification(state, "Export failed: timed out")

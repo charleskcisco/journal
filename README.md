@@ -23,17 +23,17 @@ Alternatively, the writer could design an entirely new system with the principle
 ## Specifics
 Journal conforms to my vault, where I use a relatively minimal set of plugins for academic writing and note taking. Hence, its features, split between the Journal and the Editor, are as follows:
 
-Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right (on wider displays only) is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, refresh your list, or shut down your writerdeck (assuming you're on a Linux-powered system), update Journal.
+Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right (on wider displays only) is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, refresh your list, update Journal, or shut down your writerdeck (assuming you're on a Linux-powered system).
 
 <img width="1280" height="400" alt="screenshot_20260228_143656" src="https://github.com/user-attachments/assets/3a1479cc-5e74-49d6-ae64-d49198504c71" />
 
-From the Journal, you can also view a list of and share (via [FileBrowser](https://github.com/filebrowser/filebrowser)) or print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on which below). 
+From the Journal, you can also view a list of exports (.docx or .pdf files created via a custom pandoc/libreoffice pipeline, on which below) and share (via [File Browser](https://github.com/filebrowser/filebrowser)) or print them 
 
 <img width="1280" height="400" alt="screenshot_20260228_143701" src="https://github.com/user-attachments/assets/a45c3b48-6105-4202-9a7b-e8546ddab4d3" />
 
 <img width="1280" height="400" alt="screenshot_20260228_143705" src="https://github.com/user-attachments/assets/c78f46da-32aa-438a-9853-f5fe9790b96e" />
 
-To print, press enter with a .pdf selected. To open network sharing, press s. The notification row at the bottom of the display will give you an IP address to visit on your web browser; from there you can manage and/or copy files.
+To print, press enter with a .pdf or .docx selected. To open network sharing, press s. The notification row at the bottom of the display will give you an IP address to visit on your web browser; from there you can manage and/or copy files.
 
 Once you enter the Editor screen, you may edit your document (surprise again) in the markdown syntax.
 
@@ -51,7 +51,7 @@ This opens a panel on the right that serves as a guide for the keybindings below
 <img width="1280" height="400" alt="screenshot_20260228_143848" src="https://github.com/user-attachments/assets/381358f4-f0f9-47f1-a3a5-236640af1674" />
 
 ### Markdown reference (palette only)---not everyone is John Gruber, you know?
-This opens the Markdown syntax cheat sheet from markdown.org, which can help those of you who are either memory challenged or haven't been doing this for eight plus years.
+This opens a Markdown syntax cheat sheet, which can help those of you who are either memory challenged or haven't been doing this for eight plus years.
 
 ### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
@@ -139,12 +139,23 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | e   | Toggle exports view |
 | ^r  | Refresh list        |
 | ^s (x2) | Shut down        |
+| p   | Pin entry to the top of list         |
 | n   | New entry           |
 | r   | Rename entry        |
 | d   | Delete entry        |
 | c   | Duplicate entry     |
-| /   | Focus search        |
+| /   | Search        |
 | ^u (x2) | (Check for) update        |
+
+### Exports
+
+| Key | Action              |
+| --- | ------------------- |
+| j   | Toggle Journal view |
+| d   | Delete entry        |
+| enter   | Print selected file |
+| s   | Start File Browser session |
+| /   | Search        |
 
 
 ### Editor
@@ -162,7 +173,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 | Ctrl+W   | Toggle word/paragraph count          |
 | Ctrl+Y   | Redo                                 |
 | Ctrl+Z   | Undo                                 |
-| Esc (x2) | Return to file browser               |
+| Esc (x2) | Return to Journal              |
 
 ## Dependencies
 

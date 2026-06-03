@@ -1,4 +1,4 @@
-# Journal---a writerdeck-compatible companion for your Obsidian vault 
+# Journal—a writerdeck-compatible companion for your Obsidian vault 
 
 <img width="1280" height="400" alt="screenshot_20260228_143656" src="https://github.com/user-attachments/assets/de477a9f-d190-4fc8-b9c1-65802c082b43" />
 
@@ -27,7 +27,7 @@ Journal opens into the Journal (surprise), a two-pane layout that shows the .md 
 
 <img width="1280" height="400" alt="screenshot_20260228_143656" src="https://github.com/user-attachments/assets/3a1479cc-5e74-49d6-ae64-d49198504c71" />
 
-From the Journal, you can also view a list of and print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below).
+From the Journal, you can also view a list of and share (via [FileBrowser](https://github.com/filebrowser/filebrowser)) or print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below). 
 
 <img width="1280" height="400" alt="screenshot_20260228_143701" src="https://github.com/user-attachments/assets/a45c3b48-6105-4202-9a7b-e8546ddab4d3" />
 

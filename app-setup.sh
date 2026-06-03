@@ -24,6 +24,7 @@ sudo apt upgrade -y
 #   python3 *           — runtime
 echo "Installing required packages..."
 sudo apt install -y \
+    curl \
     micro ranger \
     pandoc libreoffice \
     cups cups-client \
@@ -32,6 +33,14 @@ sudo apt install -y \
     wl-clipboard xclip \
     aspell aspell-en \
     python3 python3-pip python3-venv
+
+# File Browser — optional web share of the vault, toggled from Journal's
+# exports screen (press s). Single Go binary; the official script picks
+# the right build for this CPU (incl. ARM).
+if ! command -v filebrowser >/dev/null 2>&1; then
+    echo "Installing File Browser..."
+    curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
+fi
 
 # Python venv + Journal dependencies (delegated to setup.sh, which the
 # self-update loop in run.sh also reuses).
@@ -45,4 +54,6 @@ echo "Next: ./device-setup.sh to launch Journal automatically on boot."
 echo ""
 echo "Rebooting in 5 seconds to apply updates (Ctrl+C to cancel)..."
 sleep 5
-sudo reboot now
+# Sudo-free reboot (same approach as Journal's shutdown: relies on the
+# logged-in console session's logind/polkit rights, not sudo).
+shutdown -r now

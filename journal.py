@@ -9,6 +9,8 @@ import json
 import os
 import re
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -160,6 +162,26 @@ _APP_DIR = Path(__file__).resolve().parent
 _REFS_DIR = _APP_DIR / "refs"
 _SCREENSHOTS_DIR = _APP_DIR / "screenshots"
 _DEFAULT_SPACING = "double"
+
+# File Browser (filebrowser/filebrowser) — optional web share of the vault.
+FILEBROWSER_PORT = 8080
+
+
+def _lan_ip():
+    """Best-effort LAN IP for building the File Browser URL. No packets are
+    sent (UDP connect just picks the source interface); falls back to the
+    hostname / localhost when offline."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return "127.0.0.1"
+    finally:
+        s.close()
 
 
 def parse_yaml_frontmatter(content: str) -> dict:
@@ -1190,6 +1212,9 @@ class AppState:
         self.update_count = 0
         self.update_pending = 0.0
         self.update_check_task = None
+        # File Browser web share
+        self.filebrowser_proc = None
+        self.share_url = ""
         # .bib cache
         self.bib_entries: list[BibEntry] = []
         self.bib_path: Optional[Path] = None
@@ -2282,7 +2307,7 @@ def create_app(storage):
         S = ("class:hint.sep", "  ·  ")
         return [
             ("class:hint", " (/) search  (j) journal"), S,
-            ("class:hint", "(↵) print  (d) delete"),
+            ("class:hint", "(↵) print  (s) share  (d) delete"),
         ]
 
     def _get_right_hints():
@@ -2358,7 +2383,7 @@ def create_app(storage):
         S = ("class:hint.sep", "  ·  ")
         return [
             ("class:hint", " (/) search"), S,
-            ("class:hint", "(↵) print  (d) delete"),
+            ("class:hint", "(↵) print  (s) share  (d) delete"),
         ]
 
     narrow_title_window = VSplit([
@@ -2610,9 +2635,15 @@ def create_app(storage):
     # its own status bar). Hidden unless there is a message to show, so it
     # surfaces things like print results that would otherwise be invisible
     # here. Reused across all four layouts -- only one is active at a time.
+    def _sharing_on_exports():
+        return state.showing_exports and _filebrowser_running()
+
     def _journal_status_text():
         if state.notification:
             return [("class:status", f" {state.notification}")]
+        if _sharing_on_exports():
+            return [("class:accent",
+                     f" File browser: {state.share_url} — press s to stop")]
         if state.update_available:
             return [("class:accent",
                      " Update available — press ^u to install & restart")]
@@ -2623,7 +2654,8 @@ def create_app(storage):
             FormattedTextControl(_journal_status_text),
             height=1, style="class:status"),
         filter=Condition(
-            lambda: bool(state.notification) or state.update_available),
+            lambda: bool(state.notification) or _sharing_on_exports()
+            or state.update_available),
     )
 
     journal_view = HSplit([
@@ -3356,6 +3388,68 @@ def create_app(storage):
             get_app().layout.focus(entry_list.window)
         get_app().invalidate()
 
+    # ── File Browser web share ───────────────────────────────────────
+    def _filebrowser_running():
+        proc = state.filebrowser_proc
+        # poll() reaps the child once it has exited.
+        return proc is not None and proc.poll() is None
+
+    def _start_filebrowser():
+        if _filebrowser_running():
+            return
+        fb = shutil.which("filebrowser")
+        if not fb:
+            show_notification(state, "filebrowser not installed.")
+            return
+        cfg_dir = _config_path().parent
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        db = cfg_dir / "filebrowser.db"
+        try:
+            logf = open(cfg_dir / "filebrowser.log", "ab")
+            state.filebrowser_proc = subprocess.Popen(
+                [fb, "-r", str(state.storage.vault_dir),
+                 "-a", "0.0.0.0", "-p", str(FILEBROWSER_PORT),
+                 "--noauth", "-d", str(db)],
+                stdout=logf, stderr=logf, stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            show_notification(state, f"Could not start filebrowser: {exc}")
+            return
+        state.share_url = f"http://{_lan_ip()}:{FILEBROWSER_PORT}"
+        show_notification(state, f"Sharing vault at {state.share_url}", duration=6)
+        get_app().invalidate()
+
+    def _stop_filebrowser(notify=True):
+        proc = state.filebrowser_proc
+        state.filebrowser_proc = None
+        state.share_url = ""
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+
+            async def _reap():
+                loop = asyncio.get_running_loop()
+                try:
+                    await loop.run_in_executor(None, lambda: proc.wait(5))
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+            asyncio.ensure_future(_reap())
+        if notify:
+            show_notification(state, "Stopped sharing.")
+        get_app().invalidate()
+
+    def toggle_filebrowser():
+        if _filebrowser_running():
+            _stop_filebrowser()
+        else:
+            _start_filebrowser()
+
     # ── Key bindings ─────────────────────────────────────────────────
 
     kb = KeyBindings()
@@ -3561,6 +3655,12 @@ def create_app(storage):
     def _(event):
         if state.showing_exports:
             toggle_exports()
+
+    @kb.add("s", filter=entry_list_focused)
+    def _(event):
+        # Exports screen only: start/stop the File Browser web share.
+        if state.showing_exports:
+            toggle_filebrowser()
 
     @kb.add("c-r", filter=is_journal & no_float)
     def _(event):
@@ -4115,6 +4215,24 @@ def create_app(storage):
 
     app.start_background_tasks = _start_background_tasks
 
+    def _cleanup():
+        # Don't leave the File Browser server running after the TUI exits
+        # (or before a self-update relaunch). Safe to block briefly here:
+        # the event loop is gone and the terminal is restored.
+        proc = state.filebrowser_proc
+        state.filebrowser_proc = None
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+    app.cleanup = _cleanup
+
     return app
 
 
@@ -4176,6 +4294,9 @@ def main() -> None:
 
     app = create_app(VaultStorage(data_dir))
     result = app.run(pre_run=getattr(app, "start_background_tasks", None))
+    cleanup = getattr(app, "cleanup", None)
+    if cleanup:
+        cleanup()
     # Exit code 42 tells the launcher (run.sh) to pull the update and
     # relaunch. Every other exit (^Q quit, ^S shutdown, crash) returns
     # normally, so the launcher loop just ends -- nothing auto-relaunches.

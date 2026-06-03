@@ -23,15 +23,17 @@ Alternatively, the writer could design an entirely new system with the principle
 ## Specifics
 Journal conforms to my vault, where I use a relatively minimal set of plugins for academic writing and note taking. Hence, its features, split between the Journal and the Editor, are as follows:
 
-Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, or shut down your writerdeck (assuming you're on a Linux-powered system with auto-login enabled).
+Journal opens into the Journal (surprise), a two-pane layout that shows the .md files in one's vault on the left, organized in reverse-chronological order; on the right (on wider displays only) is a preview pane designed to give a glimpse into the file's contents (YAML excluded). From here, you can make a new file, rename, delete, or duplicate existing files, search your vault via filename, refresh your list, or shut down your writerdeck (assuming you're on a Linux-powered system), update Journal.
 
 <img width="1280" height="400" alt="screenshot_20260228_143656" src="https://github.com/user-attachments/assets/3a1479cc-5e74-49d6-ae64-d49198504c71" />
 
-From the Journal, you can also view a list of and share (via [FileBrowser](https://github.com/filebrowser/filebrowser)) or print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on that below). 
+From the Journal, you can also view a list of and share (via [FileBrowser](https://github.com/filebrowser/filebrowser)) or print exports, .docx or .pdf files created via a custom pandoc/libreoffice pipeline (more on which below). 
 
 <img width="1280" height="400" alt="screenshot_20260228_143701" src="https://github.com/user-attachments/assets/a45c3b48-6105-4202-9a7b-e8546ddab4d3" />
 
 <img width="1280" height="400" alt="screenshot_20260228_143705" src="https://github.com/user-attachments/assets/c78f46da-32aa-438a-9853-f5fe9790b96e" />
+
+To print, press enter with a .pdf selected. To open network sharing, press s. The notification row at the bottom of the display will give you an IP address to visit on your web browser; from there you can manage and/or copy files.
 
 Once you enter the Editor screen, you may edit your document (surprise again) in the markdown syntax.
 
@@ -47,6 +49,9 @@ Let me talk about these features and their bindings in more detail (organized fr
 This opens a panel on the right that serves as a guide for the keybindings below. It can stay open as you edit as a reference if needed.
 
 <img width="1280" height="400" alt="screenshot_20260228_143848" src="https://github.com/user-attachments/assets/381358f4-f0f9-47f1-a3a5-236640af1674" />
+
+### Markdown reference (palette only)---not everyone is John Gruber, you know?
+This opens the Markdown syntax cheat sheet from markdown.org, which can help those of you who are either memory challenged or haven't been doing this for eight plus years.
 
 ### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
@@ -79,8 +84,8 @@ If you press escape (twice to prevent accidental activation), you'll return to t
 ### Quit to CLI (ctrl+q)---how many times do you think I accidentally quit to CLI before I made this require a double press?
 Likewise, a double press of ctrl+q sends the user back to the command line.
 
-### Shut down (ctrl+s *from the Journal screen*)---a sudo command? HERE?!
-My writerdeck boots into the Journal screen, and often I spend all of my time with this device in this app. I wanted to be able to shut down without exiting to CLI, so I set up a double press of ctrl+s to do the job. (*N*.*b*., this only works if you have auto-login set up on your device, because all it does is run 'sudo shutdown now'---I know, I'm a maverick). 
+### Shut down (ctrl+s *from the Journal screen*)---for when you're done writing...or done with the task of writing.
+My writerdeck boots into the Journal screen, and often I spend all of my time with this device in this app. I wanted to be able to shut down without exiting to CLI, so I set up a double press of ctrl+s to do the job.
 
 ### Insert blank footnote (ctrl+n)---footnotes are fascinating.
 The next two features are related. First, ctrl+n offers a quick and frictionless way to insert an inline markdown footnote (the correct kind of markdown footnote; do not @ me). Once you've done that, though, the real magic begins. 
@@ -99,10 +104,11 @@ This will insert at the top of the document the frontmatter relevant to the expo
 
 ```yaml
 ---
-title: "My Essay"
-author: "First Last"
-instructor: "Prof. Name"
-date: "2026-02-13"
+title: Essay
+author: Johnny Smith
+instructor: Dr. Cisco
+date: 2 June 2026
+course: Class title
 spacing: double
 style: chicago
 bibliography: /home/username/documents/sources/library.bib
@@ -124,19 +130,22 @@ If you used a .bib, you can add "bibliography" and "csl" fields to the YAML and 
 
 This functionality mirrors two Obsidian plugins that I designed for my own personal use, citekey and md2pdf, both of which are available in other repositories.
 
-## Keyboard shortcuts in tables for the prose-weary
+## Keyboard shortcuts in tables for the prose-weary (as if)
 
 ### Journal
 
 | Key | Action              |
 | --- | ------------------- |
+| e   | Toggle exports view |
+| ^r  | Refresh list        |
+| ^s (x2) | Shut down        |
 | n   | New entry           |
 | r   | Rename entry        |
 | d   | Delete entry        |
 | c   | Duplicate entry     |
-| e   | Toggle exports view |
 | /   | Focus search        |
-| Ctrl+S (x2) | Shut down        |
+| ^u (x2) | (Check for) update        |
+
 
 ### Editor
 
@@ -166,8 +175,9 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 
 ```bash
 git clone https://github.com/charleskcisco/journal.git
-chmod +x setup.sh run.sh
-./setup.sh     # creates venv, installs prompt_toolkit and other dependencies
+chmod +x app-setup.sh device-setup.sh run.sh
+./device-setup.sh     # adds device startup script to boot straight into Journal
+./app-setup.sh     # creates venv, installs prompt_toolkit and other dependencies
 JOURNAL_VAULT=~/notes ./run.sh         # custom vault directory
 ./run.sh       # launches journal
 ```

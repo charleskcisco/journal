@@ -12,13 +12,13 @@ Obsidian, for all of its praiseworthy attributes, has some flaws. It's an Electr
 
 But let's imagine that sleek, performant, fruit logo'd clamshell laptops are not the only relevant kind of device. Perhaps the writer wants to draft on a simpler, distraction-free device and edit elsewhere. Enter the writerdeck, a form of single-use device increasingly popular for composition among students and professional authors. Craig Mod, in a recent [newsletter](https://craigmod.com/roden/111/) talking about an Obsidian-powered pseudo-writerdeck he's been using, puts it well:
 
-> Perhaps the sweet spot was word processors---dedicated writing machines that afforded some simplicity (no dependence on physical media to write at length; search; inline editing; compact-ish) without (overly) compromising the act itself. No extraneous distractions, just thoughts and words.
+> Perhaps the sweet spot was word processors—dedicated writing machines that afforded some simplicity (no dependence on physical media to write at length; search; inline editing; compact-ish) without (overly) compromising the act itself. No extraneous distractions, just thoughts and words.
 
 The writerdeck is a single-purpose composition appliance, sometimes manufactured at scale running proprietary software (see Pomera, Freewrite, etc.) and sometimes assembled by hobbyists with 3D printers and off-the-shelf components for themselves or small groups of others (as with [Micro-Journal](https://github.com/unkyulee/micro-journal)) and powered by Linux (cf. the Micro-Journal rev. 2, a writerdeck designed around Raspberry Pi Zero 2 W with a 1280x400 display on which this project is designed to run by default). They're tools designed mostly by writers and for writers, and writers have been adopting them in droves. You can too.
 
-At that point, the writer has two choices---well this writer had two choices. The first is this: to abandon a tool that has served him well for many years in favor of simple but limited alternatives (Wordgrinder, Micro) that could perhaps be plugged back into his working system. This could suit. The solution would be to draft on Wordgrinder, Micro, or whatever else writerdeck manufacturers employ and export the resulting files to a more robust system for editing and production in Obsidian later. Many people do precisely this and I suspect they do just fine.
+At that point, the writer has two choices—well this writer had two choices. The first is this: to abandon a tool that has served him well for many years in favor of simple but limited alternatives (Wordgrinder, Micro) that could perhaps be plugged back into his working system. This could suit. The solution would be to draft on Wordgrinder, Micro, or whatever else writerdeck manufacturers employ and export the resulting files to a more robust system for editing and production in Obsidian later. Many people do precisely this and I suspect they do just fine.
 
-Alternatively, the writer could design an entirely new system with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Raspberry Pi Zero 2 W or similar hardware---to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
+Alternatively, the writer could design an entirely new system with the principles and functionality of Obsidian in mind, but minimal and lightweight enough to run in Linux on a Raspberry Pi Zero 2 W or similar hardware—to serve as a surface for the drafting portion of the writing process that can at the fullness of time give way to the editing portion in Obsidian. (Crucial to this is Syncthing, which runs on both my PC and my Linux-powered writerdeck). Thus was born Journal, a writerdeck-compatible companion for my Obsidian vault. 
 
 ## Specifics
 Journal conforms to my vault, where I use a relatively minimal set of plugins for academic writing and note taking. Hence, its features, split between the Journal and the Editor, are as follows:
@@ -45,65 +45,65 @@ As in Obsidian, you can use ctrl+p to open a command palette, from which you can
 
 Let me talk about these features and their bindings in more detail (organized from least to most interesting, for whimsy's sake).
 
-### Keybindings guide (ctrl+g)---the epitome of boring, as most essential things are
+### Keybindings guide (ctrl+g)—the epitome of boring, as most essential things are
 This opens a panel on the right that serves as a guide for the keybindings below. It can stay open as you edit as a reference if needed.
 
 <img width="1280" height="400" alt="screenshot_20260228_143848" src="https://github.com/user-attachments/assets/381358f4-f0f9-47f1-a3a5-236640af1674" />
 
-### Markdown reference (palette only)---not everyone is John Gruber, you know?
+### Markdown reference (palette only)—not everyone is John Gruber, you know?
 This opens a Markdown syntax cheat sheet, which can help those of you who are either memory challenged or haven't been doing this for eight plus years.
 
-### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)---good luck convincing people to use a text editor that doesn't do these things.
+### Copy (ctrl+c)/Cut (ctrl+x)/Paste (ctrl+v)—good luck convincing people to use a text editor that doesn't do these things.
 These work as you'd expect them to do. Don't worry, it gets more interesting from here.
 
-### Undo (ctrl+z) and redo (ctrl+y)---because I've accidentally deleted my entire document, too.
+### Undo (ctrl+z) and redo (ctrl+y)—because I've accidentally deleted my entire document, too.
 These binds do exactly what they say on the tin, and are only barely more interesting than copy, cut, and paste.
 
-### Bold (ctrl+b) and italicize (ctrl+i)---boldly going where *every* text editor has gone before.
+### Bold (ctrl+b) and italicize (ctrl+i)—boldly going where *every* text editor has gone before.
 Markdown is a plain text language that handles **bold**, *italics*, ***or a combination of the pair*** via enclosing words in asterisks. These clever bindings just place the appropriate number thereof around the word in which your cursor is currently resting or around your selection.
 
-### Go to top (ctrl+up) or bottom (ctrl+down)---think about it and you'll realize that this is more interesting than you first thought.
+### Go to top (ctrl+up) or bottom (ctrl+down)—think about it and you'll realize that this is more interesting than you first thought.
 By design, Journal places your cursor on the first line after any frontmatter. These bindings can move it either to the very top of the document or (probably more usefully) to its last line, so you can pick up where you left off.
 
-### Toggle word and paragraph count (ctrl+w)---downright fascinating is what it is.
+### Toggle word and paragraph count (ctrl+w)—downright fascinating is what it is.
 Word counts are a necessary evil (maybe), but they do prompt some really poor behavior from bad writers who need to hit them. Sometimes, though, it's helpful to measure the number of rounded, complete, coherent sets of thought you've produced. The paragraph count is your tool for that latter, more noble goal. You can also toggle this off, if you're the sort of writer who defies measurement of your process.
 
-### Find and/or replace (ctrl+f)---this placement was less about how interesting it is in principle and more about how hard it was to theorize and implement.
+### Find and/or replace (ctrl+f)—this placement was less about how interesting it is in principle and more about how hard it was to theorize and implement.
 Journal offers (if I may say so myself) a relatively robust find and replace feature. Ctrl+f summons a panel in which you may type a particular word. At that point, you have a choice. Enter will send you into the editor pane and highlight the term you sought. You can cycle through results with ctrl+k (next) and ctrl+j (previous), and you can return to the find panel with ctrl+f, from which you can then also replace that word you sought or replace every instance of it in your document.
 
 <img width="1280" height="400" alt="screenshot_20260228_143732" src="https://github.com/user-attachments/assets/e845b296-d1e1-40cf-8477-9d7716f59118" />
 
-### Spell check (palette only)---not everyone is a natural at this nonsense
+### Spell check (palette only)—not everyone is a natural at this nonsense
 Spelling is hard (for most people...I hear), so hearing the cries of the masses I implemented a spell check. It uses aspell as a backend and can be triggered from the command palette. It follows the logic of the find/replace dialogue; when triggered, it scans the whole document and runs through misspellings one at a time, highlighting them in a harsh but fitting red, suggesting replacements, and offering options to skip or add to dictionary.
 
 <img width="1280" height="400" alt="screenshot_20260228_143803" src="https://github.com/user-attachments/assets/62f04de2-db6d-40dd-86f2-2eaf594f82df" />
 
-### Return to Journal (esc)---the pressing twice thing makes this fascinating if you mull it over.
+### Return to Journal (esc)—the pressing twice thing makes this fascinating if you mull it over.
 If you press escape (twice to prevent accidental activation), you'll return to the Journal screen.
 
-### Quit to CLI (ctrl+q)---how many times do you think I accidentally quit to CLI before I made this require a double press?
+### Quit to CLI (ctrl+q)—how many times do you think I accidentally quit to CLI before I made this require a double press?
 Likewise, a double press of ctrl+q sends the user back to the command line.
 
-### Shut down (ctrl+s *from the Journal screen*)---for when you're done writing...or done with the task of writing.
+### Shut down (ctrl+s *from the Journal screen*)—for when you're done writing...or done with the task of writing.
 My writerdeck boots into the Journal screen, and often I spend all of my time with this device in this app. I wanted to be able to shut down without exiting to CLI, so I set up a double press of ctrl+s to do the job.
 
-### Insert blank footnote (ctrl+n)---footnotes are fascinating.
+### Insert blank footnote (ctrl+n)—footnotes are fascinating.
 The next two features are related. First, ctrl+n offers a quick and frictionless way to insert an inline markdown footnote (the correct kind of markdown footnote; do not @ me). Once you've done that, though, the real magic begins. 
 
-### Search for and insert citekey (ctrl+r)---this will revolutionize your academic writing once you figure out how to implement it. Even if you don't like Journal, you should get this into your workflow.
+### Search for and insert citekey (ctrl+r)—this will revolutionize your academic writing once you figure out how to implement it. Even if you don't like Journal, you should get this into your workflow.
 Ctrl+r will open a pop-up from which you can fuzzy search your .bib file in `~/Documents/sources/` (exported from a robust Zotero library, I'm guessing, you studious guy or gal, you) and insert a citekey at your cursor. That plus pandoc's --citeproc flag (more on that below) revolutionized citation workflow for me. You have got to try it.
 
 <img width="1280" height="400" alt="screenshot_20260228_143822" src="https://github.com/user-attachments/assets/452e05be-51fa-4e33-9870-6b809e54eaf7" />
 
 <img width="1280" height="400" alt="screenshot_20260228_143827" src="https://github.com/user-attachments/assets/97c25cf4-6549-46ba-9595-c2b6eb59428b" />
 
-### Insert frontmatter (palette only)---YAML is an old trick, but here it's used for a very specific function.
+### Insert frontmatter (palette only)—YAML is an old trick, but here it's used for a very specific function.
 This will insert at the top of the document the frontmatter relevant to the export function. I reckon title, author, instructor, and date are pretty self-explanatory, or will be once you understand how this feature works. Style accepts one of two case sensitive inputs: "chicago" and "mla". Spacing, likewise, accepts "single" or "double". You can also add your own frontmatter elements, the most relevant of which might be "bibliography", "csl", and "tags". Now to talk about the final feature in this section.
 
 #### Example
 
 ```yaml
----
+—
 title: Essay
 author: Johnny Smith
 instructor: Dr. Cisco
@@ -113,7 +113,7 @@ spacing: double
 style: chicago
 bibliography: /home/username/documents/sources/library.bib
 csl: /home/username/documents/sources/chicago.csl 
----
+—
 ```
 
 - **spacing**: `single`, `double`
@@ -121,7 +121,7 @@ csl: /home/username/documents/sources/chicago.csl
 - **bibliography**: path to `.bib` file (enables `--citeproc` during export)
 - **csl**: path to `.csl` file
 
-### Export (palette only)---this is basically its own app, frankly.
+### Export (palette only)—this is basically its own app, frankly.
 This feature uses pandoc and libreoffice in the background to produce a .pdf formatted for submission in academic contexts. Pulling from the frontmatter, pandoc shapes your .md into a .docx formatted according to either Chicago style (with a title page containing your title, author, instructor, and date and page numbers centered in the footer with the final word of the author field appended to the front) or MLA (with a header on the first page according to MLA standards and page numbers on the top right). These can be either single- or double-spaced. Then, if you selected the .pdf output, it will use libreoffice to headlessly convert the .docx into a .pdf. You can either print these outputs from the exports screen or access them via your synced vault on your PC.
 
 <img width="1280" height="400" alt="screenshot_20260228_143723" src="https://github.com/user-attachments/assets/bea304c7-05cb-4277-95ea-b86a8664c393" />
@@ -135,7 +135,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 ### Journal
 
 | Key | Action              |
-| --- | ------------------- |
+| — | ——————- |
 | e   | Toggle exports view |
 | ^r  | Refresh list        |
 | ^s (x2) | Shut down        |
@@ -150,7 +150,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 ### Exports
 
 | Key | Action              |
-| --- | ------------------- |
+| — | ——————- |
 | j   | Toggle Journal view |
 | d   | Delete entry        |
 | enter   | Print selected file |
@@ -161,7 +161,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 ### Editor
 
 | Key      | Action                               |
-| -------- | ------------------------------------ |
+| ——-- | ———————————— |
 | Ctrl+B   | Bold                                 |
 | Ctrl+F   | Find/Replace                         |
 | Ctrl+G   | Toggle keybindings panel             |
@@ -193,7 +193,7 @@ JOURNAL_VAULT=~/notes ./run.sh         # custom vault directory
 ./run.sh       # launches journal
 ```
 
-By default, Journal reads `.md` files from `~/Documents/`---just plain Markdown files compatible with Obsidian and any other editor. Exports go to `~/Documents/pdf/` and `~/Documents/docx/`.
+By default, Journal reads `.md` files from `~/Documents/`—just plain Markdown files compatible with Obsidian and any other editor. Exports go to `~/Documents/pdf/` and `~/Documents/docx/`.
 
 ## Advanced set-up (some of which, alas, requires explanation)
 To make the most of Journal, you'll need the following:

@@ -103,7 +103,7 @@ This will insert at the top of the document the frontmatter relevant to the expo
 #### Example
 
 ```yaml
-—
+---
 title: Essay
 author: Johnny Smith
 instructor: Dr. Cisco
@@ -113,7 +113,7 @@ spacing: double
 style: chicago
 bibliography: /home/username/documents/sources/library.bib
 csl: /home/username/documents/sources/chicago.csl 
-—
+---
 ```
 
 - **spacing**: `single`, `double`
@@ -135,7 +135,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 ### Journal
 
 | Key | Action              |
-| — | ——————- |
+| --- | ------------------- |
 | e   | Toggle exports view |
 | ^r  | Refresh list        |
 | ^s (x2) | Shut down        |
@@ -150,7 +150,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 ### Exports
 
 | Key | Action              |
-| — | ——————- |
+| --- | ------------------- |
 | j   | Toggle Journal view |
 | d   | Delete entry        |
 | enter   | Print selected file |
@@ -161,7 +161,7 @@ This functionality mirrors two Obsidian plugins that I designed for my own perso
 ### Editor
 
 | Key      | Action                               |
-| ——-- | ———————————— |
+| -------- | ------------------------------------ |
 | Ctrl+B   | Bold                                 |
 | Ctrl+F   | Find/Replace                         |
 | Ctrl+G   | Toggle keybindings panel             |

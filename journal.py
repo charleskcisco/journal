@@ -879,6 +879,34 @@ class MarkdownLexer(PtLexer):
         (re.compile(r'\^\[[^\]]*\]'), 'class:md.footnote'),
         (re.compile(r'\[[^\]]+\]\([^)]+\)'), 'class:md.link'),
     ]
+    # Leading list marker: indent, then a task ("- [ ]"), a bullet, or a
+    # number. Requires whitespace after the marker so "---" / a lone "-"
+    # aren't treated as lists.
+    _LIST_RE = re.compile(
+        r'^(\s*)((?:[-*+]\s+\[[ xX]\])|[-*+]|\d+[.)])(\s+)(.*)$')
+
+    @staticmethod
+    def _inline_fragments(text):
+        """Highlight inline spans (bold/italic/code/footnote/link) in text."""
+        matches = []
+        for pattern, style in MarkdownLexer._PATTERNS:
+            for m in pattern.finditer(text):
+                matches.append((m.start(), m.end(), style))
+        if not matches:
+            return [('', text)]
+        matches.sort(key=lambda x: x[0])
+        fragments = []
+        pos = 0
+        for start, end, style in matches:
+            if start < pos:
+                continue
+            if start > pos:
+                fragments.append(('', text[pos:start]))
+            fragments.append((style, text[start:end]))
+            pos = end
+        if pos < len(text):
+            fragments.append(('', text[pos:]))
+        return fragments
 
     def lex_document(self, document):
         lines = document.lines
@@ -896,25 +924,18 @@ class MarkdownLexer(PtLexer):
                     ('class:md.heading-marker', hm.group(1)),
                     ('class:md.heading', hm.group(2)),
                 ]
-            matches = []
-            for pattern, style in MarkdownLexer._PATTERNS:
-                for m in pattern.finditer(text):
-                    matches.append((m.start(), m.end(), style))
-            if not matches:
-                return [('', text)]
-            matches.sort(key=lambda x: x[0])
-            fragments = []
-            pos = 0
-            for start, end, style in matches:
-                if start < pos:
-                    continue
-                if start > pos:
-                    fragments.append(('', text[pos:start]))
-                fragments.append((style, text[start:end]))
-                pos = end
-            if pos < len(text):
-                fragments.append(('', text[pos:]))
-            return fragments
+            lm = MarkdownLexer._LIST_RE.match(text)
+            if lm:
+                indent, marker, ws, rest = lm.groups()
+                frags = []
+                if indent:
+                    frags.append(('', indent))
+                frags.append(('class:md.list-marker', marker))
+                frags.append(('', ws))
+                if rest:
+                    frags.extend(MarkdownLexer._inline_fragments(rest))
+                return frags
+            return MarkdownLexer._inline_fragments(text)
 
         return get_line
 
@@ -1398,6 +1419,41 @@ def _word_count(text):
     """Count words in text (excluding YAML frontmatter)."""
     body = re.sub(r"^---\n.*?\n---\n?", "", text, count=1, flags=re.DOTALL)
     return len(body.split())
+
+
+def _list_continuation(line):
+    """Smart-list-continuation rule for a logical line.
+
+    Returns:
+      None            -- not a list item; Enter should insert a plain newline.
+      (True, indent)  -- an *empty* list item (marker only); Enter should wipe
+                         the marker and exit the list.
+      (False, prefix) -- a list item with content; Enter should start the next
+                         item with `prefix` (indent + marker, number bumped,
+                         tasks reset to unchecked).
+    """
+    # Task item (bullet + checkbox) -- check before the plain-bullet rule.
+    m = re.match(r"^(\s*)([-*+])\s+\[[ xX]\]\s*(.*)$", line)
+    if m:
+        indent, bullet, content = m.groups()
+        if content.strip() == "":
+            return (True, indent)
+        return (False, f"{indent}{bullet} [ ] ")
+    # Bullet item (requires whitespace after the marker, so "---" / "-" don't match).
+    m = re.match(r"^(\s*)([-*+])\s+(.*)$", line)
+    if m:
+        indent, bullet, content = m.groups()
+        if content.strip() == "":
+            return (True, indent)
+        return (False, f"{indent}{bullet} ")
+    # Numbered item ("1. " or "1) ").
+    m = re.match(r"^(\s*)(\d+)([.)])\s+(.*)$", line)
+    if m:
+        indent, num, sep, content = m.groups()
+        if content.strip() == "":
+            return (True, indent)
+        return (False, f"{indent}{int(num) + 1}{sep} ")
+    return None
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -2222,6 +2278,7 @@ APP_STYLE = {
     "label":                  "#e0e0e0",
     "md.heading-marker":      "#4a4a4a",
     "md.heading":             "bold #e0af68",
+    "md.list-marker":         "italic #4a4a4a",
     "md.bold":                "bold",
     "md.italic":              "italic",
     "md.code":                "#a0a0a0",
@@ -2447,9 +2504,11 @@ def create_app(storage):
 
     entry_list.on_navigate = update_preview
 
-    def refresh_entries(query=""):
+    def _render_entries(query=""):
+        # Render the list from the cached state.entries -- no disk scan.
+        # (state.entries is kept mtime-sorted so an updated note re-sorts.)
         _preview_cache["path"] = None
-        state.entries = state.storage.list_entries()
+        state.entries.sort(key=lambda e: e.modified, reverse=True)
         filtered = fuzzy_filter_entries(state.entries, query)
         if not state.entries:
             entry_list.set_items([
@@ -2471,6 +2530,13 @@ def create_app(storage):
                 name_part = e.name
                 items.append((str(e.path), f"{pin}{name_part}", mod))
             entry_list.set_items(items)
+
+    def refresh_entries(query=""):
+        # Full rescan of the vault from disk (the expensive rglob+stat),
+        # then render. Used on startup, file ops, the background watcher,
+        # and ^r -- but NOT on every return from the editor.
+        state.entries = state.storage.list_entries()
+        _render_entries(query)
 
     def refresh_exports(query=""):
         files = []
@@ -2507,7 +2573,8 @@ def create_app(storage):
             export_list.set_items(items)
 
     def _on_search_changed(buf):
-        refresh_entries(buf.text)
+        # Filter the cached entries on each keystroke -- no disk rescan.
+        _render_entries(buf.text)
         update_preview()
     entry_search.buffer.on_text_changed += _on_search_changed
 
@@ -2876,6 +2943,7 @@ def create_app(storage):
     _KB_EXTRAS = [
         ("^up", "Go to top"), ("^dn", "Go to bottom"),
         ("^w", "Word/¶/off"),
+        ("↵", "Continue list"),
         ("^g", "Keybindings"), ("^s", "Shut down"),
         ("F12", "Screenshot"),
     ]
@@ -3250,6 +3318,7 @@ def create_app(storage):
 
     def return_to_journal():
         do_save(notify=False)
+        edited = state.current_entry
         if state.auto_save_task:
             state.auto_save_task.cancel()
             state.auto_save_task = None
@@ -3260,7 +3329,25 @@ def create_app(storage):
         state.screen = "journal"
         state.current_entry = None
         state.showing_exports = False
-        refresh_entries()
+        # Returning is hot path: avoid a full vault rescan. Just refresh
+        # the edited note's mtime in the cached list (so it re-sorts to
+        # the top) and re-render. External/Syncthing changes are picked up
+        # by the 30s background watcher or a manual ^r. Fall back to a full
+        # scan only if the note isn't in the cache (e.g. a brand-new file).
+        updated = False
+        if edited is not None:
+            for e in state.entries:
+                if e.path == edited.path:
+                    try:
+                        e.modified = e.path.stat().st_mtime
+                    except OSError:
+                        pass
+                    updated = True
+                    break
+        if updated:
+            _render_entries()
+        else:
+            refresh_entries()
         update_preview()
         get_app().layout.focus(entry_list.window)
         get_app().invalidate()
@@ -3789,6 +3876,33 @@ def create_app(storage):
         buf.set_document(Document(buf.text[:start] + buf.text[end:], start),
                          bypass_readonly=True)
         buf.insert_text(event.data)
+
+    @kb.add("enter", filter=is_editor & no_float, eager=True)
+    def _(event):
+        # Smart list continuation: continue a bullet/number/task on Enter,
+        # and wipe the marker (exit the list) when Enter is pressed on an
+        # empty item.
+        buf = editor_area.buffer
+        # Enter over a selection replaces it with a plain newline.
+        if buf.selection_state:
+            start = buf.selection_state.original_cursor_position
+            end = buf.cursor_position
+            if start > end:
+                start, end = end, start
+            buf.exit_selection()
+            buf.set_document(
+                Document(buf.text[:start] + buf.text[end:], start),
+                bypass_readonly=True)
+            buf.insert_text("\n")
+            return
+        cont = _list_continuation(buf.document.current_line)
+        if cont is None:
+            buf.insert_text("\n")
+        elif cont[0]:  # empty item -> remove the marker, exit the list
+            buf.delete_before_cursor(
+                count=len(buf.document.current_line_before_cursor))
+        else:          # continue the list with the next marker
+            buf.insert_text("\n" + cont[1])
 
     @kb.add("c-z", filter=is_editor & no_float)
     def _(event):

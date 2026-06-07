@@ -24,6 +24,7 @@ from typing import Optional
 
 from prompt_toolkit import Application
 from prompt_toolkit.application.current import get_app
+from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
@@ -4322,6 +4323,10 @@ def create_app(storage):
         style=style,
         full_screen=True,
         mouse_support=False,
+        # Bar/beam cursor instead of a block: prompt_toolkit's cursor sits
+        # *between* characters, so a block drawn on top of a glyph is
+        # misleading (e.g. shift+left wouldn't include the "covered" char).
+        cursor=CursorShape.BEAM,
     )
     app.ttimeoutlen = 0.05
 

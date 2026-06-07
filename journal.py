@@ -3319,6 +3319,12 @@ def create_app(storage):
     def return_to_journal():
         do_save(notify=False)
         edited = state.current_entry
+        # Clear any lingering editor notification (e.g. the "press esc
+        # again" prompt) so it doesn't carry onto the journal status line.
+        state.notification = ""
+        if state.notification_task:
+            state.notification_task.cancel()
+            state.notification_task = None
         if state.auto_save_task:
             state.auto_save_task.cancel()
             state.auto_save_task = None

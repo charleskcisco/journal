@@ -2984,7 +2984,24 @@ def create_app(storage):
     def _keybindings_panel_width():
         return 40 if shutil.get_terminal_size().columns >= 100 else 22
 
+    # The editor body is a DynamicContainer, so this runs every render.
+    # Cache the built container and only rebuild when a side panel toggles
+    # (find/spell/keybindings) -- during normal typing the structure is
+    # unchanged, so we avoid per-render container allocation and an extra
+    # width division. (Widths are still divided per render on whatever
+    # container we return, so a cached tree renders correctly at any size.)
+    _editor_body_cache = {"sig": None, "container": None}
+    _editor_with_margin = VSplit([Window(width=1), editor_area])
+
     def get_editor_body():
+        sig = (
+            state.show_spell_panel, id(state.spell_panel) if state.show_spell_panel else 0,
+            state.show_find_panel, id(state.find_panel) if state.show_find_panel else 0,
+            state.show_keybindings,
+            _keybindings_panel_width() if state.show_keybindings else 0,
+        )
+        if _editor_body_cache["sig"] == sig:
+            return _editor_body_cache["container"]
         parts = []
         if state.show_spell_panel and state.spell_panel:
             parts.append(state.spell_panel)
@@ -2992,7 +3009,7 @@ def create_app(storage):
         if state.show_find_panel and state.find_panel:
             parts.append(state.find_panel)
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
-        parts.append(VSplit([Window(width=1), editor_area]))
+        parts.append(_editor_with_margin)
         if state.show_keybindings:
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
             parts.append(Window(
@@ -3000,7 +3017,11 @@ def create_app(storage):
                 width=_keybindings_panel_width(),
                 style="class:keybindings-panel",
             ))
-        return VSplit(parts)
+        # No side panels -> skip the redundant outer VSplit wrapper.
+        container = parts[0] if len(parts) == 1 else VSplit(parts)
+        _editor_body_cache["sig"] = sig
+        _editor_body_cache["container"] = container
+        return container
 
     editor_screen = HSplit([
         DynamicContainer(get_editor_body),

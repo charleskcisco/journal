@@ -3572,6 +3572,14 @@ def create_app(storage):
     is_journal = Condition(lambda: state.screen == "journal")
     is_editor = Condition(lambda: state.screen == "editor")
     no_float = Condition(lambda: len(state.root_container.floats) == 0)
+    # The editor's text/cursor bindings must fire only when the editor area
+    # itself is focused -- not when a find/replace or spell panel (which
+    # live inside the editor screen, not as floats) has focus, or they'd
+    # steal Enter/arrows from the panel's own input.
+    editor_focused = Condition(
+        lambda: state.screen == "editor"
+        and len(state.root_container.floats) == 0
+        and get_app().layout.current_window == editor_area.window)
     find_panel_open = Condition(
         lambda: state.show_find_panel and state.find_panel is not None)
     search_not_focused = Condition(
@@ -3871,27 +3879,27 @@ def create_app(storage):
     editor_has_selection = Condition(
         lambda: editor_area.buffer.selection_state is not None)
 
-    @kb.add("up", filter=is_editor & no_float & editor_has_selection)
+    @kb.add("up", filter=editor_focused & editor_has_selection)
     def _(event):
         editor_area.buffer.exit_selection()
         editor_area.buffer.cursor_up()
 
-    @kb.add("down", filter=is_editor & no_float & editor_has_selection)
+    @kb.add("down", filter=editor_focused & editor_has_selection)
     def _(event):
         editor_area.buffer.exit_selection()
         editor_area.buffer.cursor_down()
 
-    @kb.add("left", filter=is_editor & no_float & editor_has_selection)
+    @kb.add("left", filter=editor_focused & editor_has_selection)
     def _(event):
         editor_area.buffer.exit_selection()
         editor_area.buffer.cursor_left()
 
-    @kb.add("right", filter=is_editor & no_float & editor_has_selection)
+    @kb.add("right", filter=editor_focused & editor_has_selection)
     def _(event):
         editor_area.buffer.exit_selection()
         editor_area.buffer.cursor_right()
 
-    @kb.add("<any>", filter=is_editor & no_float & editor_has_selection)
+    @kb.add("<any>", filter=editor_focused & editor_has_selection)
     def _(event):
         if not event.data or not event.data.isprintable():
             return
@@ -3905,7 +3913,7 @@ def create_app(storage):
                          bypass_readonly=True)
         buf.insert_text(event.data)
 
-    @kb.add("enter", filter=is_editor & no_float, eager=True)
+    @kb.add("enter", filter=editor_focused, eager=True)
     def _(event):
         # Smart list continuation: continue a bullet/number/task on Enter,
         # and wipe the marker (exit the list) when Enter is pressed on an
@@ -3932,23 +3940,23 @@ def create_app(storage):
         else:          # continue the list with the next marker
             buf.insert_text("\n" + cont[1])
 
-    @kb.add("c-z", filter=is_editor & no_float)
+    @kb.add("c-z", filter=editor_focused)
     def _(event):
         editor_area.buffer.undo()
 
-    @kb.add("c-y", filter=is_editor & no_float, save_before=lambda e: False)
+    @kb.add("c-y", filter=editor_focused, save_before=lambda e: False)
     def _(event):
         editor_area.buffer.redo()
 
-    @kb.add("c-b", filter=is_editor & no_float)
+    @kb.add("c-b", filter=editor_focused)
     def _(event):
         do_bold()
 
-    @kb.add("c-i", filter=is_editor & no_float)
+    @kb.add("c-i", filter=editor_focused)
     def _(event):
         do_italic()
 
-    @kb.add("c-n", filter=is_editor & no_float)
+    @kb.add("c-n", filter=editor_focused)
     def _(event):
         do_footnote()
 
@@ -3994,7 +4002,7 @@ def create_app(storage):
         state.find_panel._rebuild_matches()
         state.find_panel._move(-1)
 
-    @kb.add("c-r", filter=is_editor & no_float)
+    @kb.add("c-r", filter=editor_focused)
     def _(event):
         _refresh_bib_cache()
         if not state.bib_entries:
@@ -4156,7 +4164,7 @@ def create_app(storage):
         ri = editor_area.window.render_info
         return ri.window_width if ri else 60
 
-    @kb.add("up", filter=is_editor & no_float)
+    @kb.add("up", filter=editor_focused)
     def _(event):
         buf = editor_area.buffer
         doc = buf.document
@@ -4184,7 +4192,7 @@ def create_app(storage):
             new_col = min(last_start + visual_col, len(prev_line))
             buf.cursor_position = doc.translate_row_col_to_index(row - 1, new_col)
 
-    @kb.add("down", filter=is_editor & no_float)
+    @kb.add("down", filter=editor_focused)
     def _(event):
         buf = editor_area.buffer
         doc = buf.document
@@ -4211,21 +4219,21 @@ def create_app(storage):
             new_col = min(visual_col, first_end)
             buf.cursor_position = doc.translate_row_col_to_index(row + 1, new_col)
 
-    @kb.add("c-up", filter=is_editor & no_float)
+    @kb.add("c-up", filter=editor_focused)
     def _(event):
         editor_area.buffer.cursor_position = 0
 
-    @kb.add("c-down", filter=is_editor & no_float)
+    @kb.add("c-down", filter=editor_focused)
     def _(event):
         editor_area.buffer.cursor_position = len(editor_area.text)
 
-    @kb.add("left", filter=is_editor & no_float)
+    @kb.add("left", filter=editor_focused)
     def _(event):
         buf = editor_area.buffer
         if buf.cursor_position > 0:
             buf.cursor_position -= 1
 
-    @kb.add("right", filter=is_editor & no_float)
+    @kb.add("right", filter=editor_focused)
     def _(event):
         buf = editor_area.buffer
         if buf.cursor_position < len(buf.text):

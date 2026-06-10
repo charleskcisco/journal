@@ -889,8 +889,11 @@ class MarkdownLexer(PtLexer):
         (re.compile(r'(?<!\*)\*(?!\*)[^*]+?(?<!\*)\*(?!\*)'), 'class:md.italic'),
         (re.compile(r'`[^`]+`'), 'class:md.code'),
         (re.compile(r'\^\[[^\]]*\]'), 'class:md.footnote'),
+        (re.compile(r'\[\[[^\]]+\]\]'), 'class:md.wikilink'),
         (re.compile(r'\[[^\]]+\]\([^)]+\)'), 'class:md.link'),
     ]
+    # Blockquote marker, including nested ("> > ") quoting.
+    _QUOTE_RE = re.compile(r'^(\s*)((?:>\s?)+)(.*)$')
     # Leading list marker: indent, then a task ("- [ ]"), a bullet, or a
     # number. Requires whitespace after the marker so "---" / a lone "-"
     # aren't treated as lists.
@@ -923,11 +926,23 @@ class MarkdownLexer(PtLexer):
     def lex_document(self, document):
         lines = document.lines
 
+        # Dim the YAML frontmatter block (like Obsidian). Only when a
+        # closing fence exists, so a lone "---" rule at the top of a
+        # fence-less document isn't misread as frontmatter.
+        fm_end = -1
+        if lines and lines[0] == '---':
+            for i in range(1, len(lines)):
+                if lines[i] == '---':
+                    fm_end = i
+                    break
+
         def get_line(lineno):
             try:
                 text = lines[lineno]
             except IndexError:
                 return []
+            if 0 <= lineno <= fm_end:
+                return [('class:md.frontmatter', text)]
             if not text:
                 return [('', '')]
             hm = MarkdownLexer._HEADING_RE.match(text)
@@ -936,6 +951,15 @@ class MarkdownLexer(PtLexer):
                     ('class:md.heading-marker', hm.group(1)),
                     ('class:md.heading', hm.group(2)),
                 ]
+            qm = MarkdownLexer._QUOTE_RE.match(text)
+            if qm:
+                indent, marker, rest = qm.groups()
+                frags = []
+                if indent:
+                    frags.append(('', indent))
+                frags.append(('class:md.quote-marker', marker))
+                frags.extend(MarkdownLexer._inline_fragments(rest))
+                return frags
             lm = MarkdownLexer._LIST_RE.match(text)
             if lm:
                 indent, marker, ws, rest = lm.groups()
@@ -2295,6 +2319,9 @@ APP_STYLE = {
     "md.heading-marker":      "#4a4a4a",
     "md.heading":             "bold #e0af68",
     "md.list-marker":         "italic #4a4a4a",
+    "md.quote-marker":        "italic #4a4a4a",
+    "md.wikilink":            "#7aa2f7",
+    "md.frontmatter":         "#4a4a4a",
     "md.bold":                "bold",
     "md.italic":              "italic",
     "md.code":                "#a0a0a0",

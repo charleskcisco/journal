@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
+import journal
 from journal import (
     Entry, BibEntry, VaultStorage, fuzzy_filter, fuzzy_filter_entries,
     parse_bib_lightweight, _find_bib_file, _load_bib_entries,
@@ -20,6 +21,7 @@ from journal import (
     _generate_lua_filter, _lua_basic_filter,
     _lua_coverpage_filter, _lua_header_filter,
     _postprocess_docx, _REFS_DIR,
+    _list_continuation, _ensure_writable, MarkdownLexer,
 )
 
 
@@ -361,6 +363,173 @@ def test_detect_tools():
     print(f"  detect_libreoffice: {lo or '(not found)'}")
 
 
+def test_list_continuation():
+    cases = {
+        "- item": (False, "- "),
+        "* item": (False, "* "),
+        "+ item": (False, "+ "),
+        "1. item": (False, "2. "),
+        "3) item": (False, "4) "),
+        "- [ ] task": (False, "- [ ] "),
+        "- [x] done": (False, "- [ ] "),
+        "  - nested": (False, "  - "),
+        "   1. deep": (False, "   2. "),
+        "- ": (True, ""),
+        "1. ": (True, ""),
+        "- [ ] ": (True, ""),
+        "plain text": None,
+        "---": None,
+        "-": None,
+        "# heading": None,
+        "": None,
+    }
+    for line, expected in cases.items():
+        got = _list_continuation(line)
+        assert got == expected, f"{line!r}: {got!r} != {expected!r}"
+    print("  List continuation OK")
+
+
+def test_iter_md_paths():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        v = Path(tmpdir)
+        storage = VaultStorage(v)
+        (v / "a.md").write_text("x")
+        (v / "sub").mkdir()
+        (v / "sub" / "b.md").write_text("x")
+        (v / ".stversions").mkdir()
+        (v / ".stversions" / "old.md").write_text("x")
+        (v / ".trash").mkdir()
+        (v / ".trash" / "t.md").write_text("x")
+        (v / ".hidden.md").write_text("x")
+        (v / "pdf" / "p.md").write_text("x")
+        names = sorted(p.relative_to(v).as_posix()
+                       for p in storage.iter_md_paths())
+        assert names == ["a.md", "sub/b.md"], names
+    print("  Hidden/trash/export dirs excluded OK")
+
+
+def test_soft_delete():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        storage = VaultStorage(Path(tmpdir))
+        e = storage.create_entry("Note")
+        e.path.write_text("body")
+        storage.delete_entry(e)
+        assert not e.path.exists()
+        assert (Path(tmpdir) / ".trash" / "Note.md").read_text() == "body"
+        # Collision bumps instead of overwriting the trashed copy
+        e2 = storage.create_entry("Note")
+        e2.path.write_text("body2")
+        storage.delete_entry(e2)
+        assert (Path(tmpdir) / ".trash" / "Note 2.md").read_text() == "body2"
+    print("  Soft delete to .trash OK")
+
+
+def test_ensure_writable():
+    if getattr(os, "geteuid", lambda: 1)() == 0:
+        print("  (skipped: running as root)")
+        return
+    with tempfile.TemporaryDirectory() as tmpdir:
+        d = Path(tmpdir) / "ro"
+        d.mkdir()
+        os.chmod(d, 0o555)
+        assert not os.access(d, os.W_OK)
+        assert _ensure_writable(d) is True
+        assert os.access(d, os.W_OK)
+        os.chmod(d, 0o755)
+        # Missing directories are created
+        nested = Path(tmpdir) / "new" / "nested"
+        assert _ensure_writable(nested) is True
+        assert nested.is_dir()
+    print("  Read-only dir repair OK")
+
+
+def test_detect_printers():
+    class R:
+        def __init__(self, rc, out):
+            self.returncode = rc
+            self.stdout = out
+
+    orig = journal.subprocess.run
+
+    def via_e(args, **kw):
+        if args[:2] == ["lpstat", "-e"]:
+            return R(0, "P_One\nP_Two\n")
+        return R(1, "")
+
+    def via_a(args, **kw):
+        if args[:2] == ["lpstat", "-e"]:
+            return R(1, "")
+        return R(0, "HP accepting requests since now\n")
+
+    def none(args, **kw):
+        return R(1, "")
+
+    try:
+        journal.subprocess.run = via_e
+        assert journal._detect_printers() == ["P_One", "P_Two"]
+        journal.subprocess.run = via_a
+        assert journal._detect_printers() == ["HP"]
+        journal.subprocess.run = none
+        assert journal._detect_printers() == []
+    finally:
+        journal.subprocess.run = orig
+    print("  lpstat -e primary, -a fallback OK")
+
+
+def test_markdown_lexer():
+    from prompt_toolkit.document import Document
+    doc = "\n".join([
+        "---", "tags: x", "---",
+        "# H",
+        "- [ ] task",
+        "see [[Wiki]]",
+        "> quote",
+        "---",
+        "-",
+    ])
+    gl = MarkdownLexer().lex_document(Document(doc))
+    assert gl(0) == [("class:md.frontmatter", "---")]
+    assert gl(1) == [("class:md.frontmatter", "tags: x")]
+    assert gl(2) == [("class:md.frontmatter", "---")]
+    assert gl(3)[0][0] == "class:md.heading-marker"
+    assert gl(4)[0] == ("class:md.list-marker", "- [ ]")
+    assert any(s == "class:md.wikilink" for s, _ in gl(5))
+    assert gl(6)[0] == ("class:md.quote-marker", "> ")
+    assert gl(7) == [("", "---")]   # mid-document HR is not frontmatter
+    assert gl(8) == [("", "-")]     # lone dash is not a list
+    # Leading --- with no closing fence is not treated as frontmatter
+    gl2 = MarkdownLexer().lex_document(Document("---\nno close"))
+    assert gl2(0) == [("", "---")]
+    print("  Wikilink/quote/frontmatter lexing OK")
+
+
+def test_clipboard_paste_no_clobber():
+    orig_cmds = (journal._CLIP_COPY_CMD, journal._CLIP_PASTE_CMD)
+    orig_detect = journal._detect_clipboard
+    calls = {"detect": 0}
+
+    def spy_detect():
+        calls["detect"] += 1
+        return (["false"], ["false"])
+
+    try:
+        journal._detect_clipboard = spy_detect
+        # Paste cmd configured but failing: must NOT re-detect (the probe
+        # writes "" to the clipboard and would wipe what we're reading).
+        journal._CLIP_COPY_CMD = ["false"]
+        journal._CLIP_PASTE_CMD = ["false"]
+        assert journal._clipboard_paste() is None
+        assert calls["detect"] == 0
+        # No paste tool at all: nothing to clobber, re-detect once.
+        journal._CLIP_PASTE_CMD = None
+        journal._clipboard_paste()
+        assert calls["detect"] == 1
+    finally:
+        journal._detect_clipboard = orig_detect
+        journal._CLIP_COPY_CMD, journal._CLIP_PASTE_CMD = orig_cmds
+    print("  Paste retry without clipboard clobber OK")
+
+
 if __name__ == "__main__":
     print("Testing data models...")
     test_entry_dataclass()
@@ -401,6 +570,34 @@ if __name__ == "__main__":
     print("Testing tool detection...")
     test_detect_tools()
     print("  \u2713 Tool detection tests passed\n")
+
+    print("Testing list continuation...")
+    test_list_continuation()
+    print("  \u2713 List continuation tests passed\n")
+
+    print("Testing vault path filtering...")
+    test_iter_md_paths()
+    print("  \u2713 Vault path filtering tests passed\n")
+
+    print("Testing soft delete...")
+    test_soft_delete()
+    print("  \u2713 Soft delete tests passed\n")
+
+    print("Testing writable-dir repair...")
+    test_ensure_writable()
+    print("  \u2713 Writable-dir repair tests passed\n")
+
+    print("Testing printer detection...")
+    test_detect_printers()
+    print("  \u2713 Printer detection tests passed\n")
+
+    print("Testing markdown lexer...")
+    test_markdown_lexer()
+    print("  \u2713 Markdown lexer tests passed\n")
+
+    print("Testing clipboard paste retry...")
+    test_clipboard_paste_no_clobber()
+    print("  \u2713 Clipboard paste tests passed\n")
 
     print("=" * 50)
     print("All tests passed!")

@@ -3246,17 +3246,23 @@ def create_app(storage):
         # Only meaningful for a git checkout. Runs git fetch + counts how
         # many commits the upstream is ahead, off the UI thread and with
         # timeouts so it never blocks startup or hangs when offline.
+        # Returns the commits-behind count, or None when the check could
+        # not run (not a git checkout, disabled, fetch failed/offline) so
+        # the manual ^u path can report honestly. Background callers
+        # ignore the return value.
         if not (_APP_DIR / ".git").is_dir():
-            return
+            return None
         if os.environ.get("JOURNAL_NO_UPDATE_CHECK"):
-            return
+            return None
         loop = asyncio.get_running_loop()
 
         def _count_behind():
             try:
-                subprocess.run(
+                r = subprocess.run(
                     ["git", "-C", str(_APP_DIR), "fetch", "--quiet"],
                     capture_output=True, timeout=20)
+                if r.returncode != 0:
+                    return None  # offline or fetch error: don't trust refs
                 r = subprocess.run(
                     ["git", "-C", str(_APP_DIR), "rev-list", "--count",
                      "HEAD..@{u}"],
@@ -3272,6 +3278,7 @@ def create_app(storage):
             state.update_available = True
             state.update_count = n
             get_app().invalidate()
+        return n
 
     # ── Export pipeline ──────────────────────────────────────────────
 
@@ -4004,7 +4011,30 @@ def create_app(storage):
     @kb.add("c-u", filter=is_journal & no_float)
     def _(event):
         if not state.update_available:
-            show_notification(state, "Journal is up to date.")
+            # No update known: run an on-demand check instead of trusting
+            # a possibly stale (or offline) background result.
+            if state.update_check_task and not state.update_check_task.done():
+                return  # a check is already in flight
+            show_notification(state, "Checking for updates…", duration=30)
+
+            async def _check():
+                result = await update_check_once()
+                if state.update_available:
+                    # Clear the "Checking…" notice so the persistent
+                    # "Update available — ^u" hint shows immediately.
+                    state.notification = ""
+                    if state.notification_task:
+                        state.notification_task.cancel()
+                        state.notification_task = None
+                elif result is None:
+                    show_notification(
+                        state, "Update check failed (offline, or not a"
+                        " git checkout).")
+                else:
+                    show_notification(state, "Journal is up to date.")
+                get_app().invalidate()
+
+            state.update_check_task = asyncio.ensure_future(_check())
             return
         now = time.monotonic()
         if now - state.update_pending < 2.0:

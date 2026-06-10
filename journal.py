@@ -174,6 +174,7 @@ _APP_DIR = Path(__file__).resolve().parent
 _REFS_DIR = _APP_DIR / "refs"
 _SCREENSHOTS_DIR = _APP_DIR / "screenshots"
 _DEFAULT_SPACING = "double"
+_UPDATE_RECHECK_SECS = 24 * 3600.0  # re-check for updates daily while running
 
 # File Browser (filebrowser/filebrowser) — optional web share of the vault.
 FILEBROWSER_PORT = 8080
@@ -2948,16 +2949,46 @@ def create_app(storage):
 
     editor_area.control.key_bindings = _editor_cb_kb
 
+    # Word/paragraph counts are whole-document scans; don't redo them on
+    # every render while typing. Cache on the Document identity (each edit
+    # creates a new Document), recompute at most every 0.5s mid-burst, and
+    # schedule a one-shot invalidate so the accurate count appears right
+    # after typing stops.
+    _count_cache = {"doc": None, "mode": None, "value": 0,
+                    "at": 0.0, "pending": False}
+
+    def _counted(mode):
+        doc = editor_area.buffer.document
+        c = _count_cache
+        if c["doc"] is doc and c["mode"] == mode:
+            return c["value"]
+        now = time.monotonic()
+        if c["mode"] != mode or now - c["at"] >= 0.5:
+            c["value"] = (_word_count(doc.text) if mode == 0
+                          else _para_count(doc.text))
+            c["doc"], c["mode"], c["at"] = doc, mode, now
+            return c["value"]
+        if not c["pending"]:
+            c["pending"] = True
+
+            async def _refresh():
+                await asyncio.sleep(0.6)
+                c["pending"] = False
+                get_app().invalidate()
+
+            asyncio.ensure_future(_refresh())
+        return c["value"]
+
     def get_status_text():
         if state.notification:
             return [("class:status", f" {state.notification}")]
         if state.current_entry:
             if state.show_word_count == 0:
-                words = _word_count(editor_area.text)
+                words = _counted(0)
                 return [("class:status",
                          f" {state.current_entry.name}  {words} words")]
             elif state.show_word_count == 1:
-                paras = _para_count(editor_area.text)
+                paras = _counted(1)
                 return [("class:status",
                          f" {state.current_entry.name}  {paras} \u00b6")]
             else:
@@ -3172,8 +3203,16 @@ def create_app(storage):
         _watch_sig["md"] = _md_signature()
         _watch_sig["exports"] = _exports_signature()
         loop = asyncio.get_running_loop()
+        # The boot-time update check owns the first run; this stamp makes
+        # always-on decks re-check daily instead of only at boot.
+        last_update_check = time.monotonic()
         while True:
             await asyncio.sleep(30)
+            if (not state.update_available
+                    and time.monotonic() - last_update_check
+                    >= _UPDATE_RECHECK_SECS):
+                last_update_check = time.monotonic()
+                asyncio.ensure_future(update_check_once())
             # Only touch the list while it's the active screen; never
             # disturb the editor buffer or fight with an open dialog.
             if state.screen != "journal":

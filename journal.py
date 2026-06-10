@@ -152,7 +152,18 @@ class VaultStorage:
         return Entry(path=new_path, name=str(rel), modified=new_path.stat().st_mtime)
 
     def delete_entry(self, entry: Entry) -> None:
-        entry.path.unlink()
+        # Soft delete: move into the vault's .trash/ (the same folder
+        # Obsidian uses for its vault trash), bumping the name on
+        # collision. iter_md_paths skips dot-dirs, so trashed notes
+        # disappear from the list and the watcher automatically.
+        trash = self.vault_dir / ".trash"
+        trash.mkdir(parents=True, exist_ok=True)
+        dest = trash / entry.path.name
+        counter = 2
+        while dest.exists():
+            dest = trash / f"{entry.path.stem} {counter}{entry.path.suffix}"
+            counter += 1
+        shutil.move(str(entry.path), str(dest))
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1234,6 +1245,10 @@ class AppState:
         self.update_count = 0
         self.update_pending = 0.0
         self.update_check_task = None
+        # Save-conflict guard: mtime of the open note as last seen on disk
+        self.editor_disk_mtime = 0.0
+        self.save_overwrite_pending = 0.0
+        self.autosave_conflict_notified = False
         # File Browser web share
         self.filebrowser_proc = None
         self.share_url = ""
@@ -2611,6 +2626,12 @@ def create_app(storage):
         state.current_entry = entry
         state.editor_dirty = False
         content = state.storage.read_entry(entry)
+        try:
+            state.editor_disk_mtime = entry.path.stat().st_mtime
+        except OSError:
+            state.editor_disk_mtime = 0.0
+        state.save_overwrite_pending = 0.0
+        state.autosave_conflict_notified = False
         # Calculate cursor position (below YAML front matter)
         cursor_pos = 0
         if content.startswith("---\n"):
@@ -3047,11 +3068,25 @@ def create_app(storage):
         while state.screen == "editor":
             await asyncio.sleep(30)
             if state.editor_dirty and state.current_entry:
+                if _disk_changed():
+                    # Don't silently overwrite an external change; leave
+                    # the buffer dirty and tell the user once.
+                    if not state.autosave_conflict_notified:
+                        state.autosave_conflict_notified = True
+                        show_notification(
+                            state, "Auto-save paused: file changed on disk"
+                            " — ^s to overwrite.")
+                    continue
                 content = editor_area.text
                 state.editor_dirty = False
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(
                     None, state.storage.save_entry, state.current_entry, content)
+                try:
+                    state.editor_disk_mtime = (
+                        state.current_entry.path.stat().st_mtime)
+                except OSError:
+                    pass
 
     # ── Background vault watcher ─────────────────────────────────────
     # Syncthing (or any external process) can add, remove, or rewrite
@@ -3330,16 +3365,57 @@ def create_app(storage):
 
     # ── Editor actions ───────────────────────────────────────────────
 
-    def do_save(notify=True):
-        if state.current_entry:
-            content = editor_area.text
-            state.storage.save_entry(state.current_entry, content)
-            state.editor_dirty = False
-            if notify:
-                show_notification(state, "Saved.")
+    def _disk_changed():
+        # True when the open note's file was modified on disk (e.g. a
+        # Syncthing pull) since we read it. A missing file is NOT a
+        # conflict -- saving simply recreates it.
+        entry = state.current_entry
+        if not entry:
+            return False
+        try:
+            cur = entry.path.stat().st_mtime
+        except OSError:
+            return False
+        return abs(cur - state.editor_disk_mtime) > 1e-6
+
+    def do_save(notify=True, force=False):
+        if not state.current_entry:
+            return False
+        if not force and _disk_changed():
+            # Don't clobber an external change with a stale buffer.
+            state.save_overwrite_pending = time.monotonic()
+            show_notification(
+                state, "File changed on disk — press ^s again to overwrite.")
+            return False
+        content = editor_area.text
+        state.storage.save_entry(state.current_entry, content)
+        try:
+            state.editor_disk_mtime = state.current_entry.path.stat().st_mtime
+        except OSError:
+            state.editor_disk_mtime = 0.0
+        state.editor_dirty = False
+        state.autosave_conflict_notified = False
+        if notify:
+            show_notification(state, "Saved.")
+        return True
 
     def return_to_journal():
-        do_save(notify=False)
+        conflict_msg = None
+        if state.current_entry and _disk_changed():
+            # Never force-overwrite and never drop the buffer on the way
+            # out: park it in a sibling conflict copy. The on-disk file
+            # keeps the external (synced) content.
+            base = state.current_entry.path.stem
+            conflict_name = f"{base} (conflict)"
+            counter = 2
+            while (state.storage.vault_dir / f"{conflict_name}.md").exists():
+                conflict_name = f"{base} (conflict {counter})"
+                counter += 1
+            (state.storage.vault_dir / f"{conflict_name}.md").write_text(
+                editor_area.text, encoding="utf-8")
+            conflict_msg = f"Sync conflict — saved as '{conflict_name}'."
+        else:
+            do_save(notify=False)
         edited = state.current_entry
         # Clear any lingering editor notification (e.g. the "press esc
         # again" prompt) so it doesn't carry onto the journal status line.
@@ -3347,6 +3423,10 @@ def create_app(storage):
         if state.notification_task:
             state.notification_task.cancel()
             state.notification_task = None
+        if conflict_msg:
+            # Shown on the journal status line (after the clear above, so
+            # it isn't wiped with the stale editor notifications).
+            show_notification(state, conflict_msg, duration=6.0)
         if state.auto_save_task:
             state.auto_save_task.cancel()
             state.auto_save_task = None
@@ -3363,7 +3443,7 @@ def create_app(storage):
         # by the 30s background watcher or a manual ^r. Fall back to a full
         # scan only if the note isn't in the cache (e.g. a brand-new file).
         updated = False
-        if edited is not None:
+        if edited is not None and conflict_msg is None:
             for e in state.entries:
                 if e.path == edited.path:
                     try:
@@ -3375,6 +3455,8 @@ def create_app(storage):
         if updated:
             _render_entries()
         else:
+            # Full rescan: either the note wasn't cached, or a conflict
+            # copy was just written and must appear in the list.
             refresh_entries()
         update_preview()
         get_app().layout.focus(entry_list.window)
@@ -3727,7 +3809,7 @@ def create_app(storage):
                 state.storage.delete_entry(entry)
                 refresh_entries(entry_search.text)
                 update_preview()
-                show_notification(state, "Entry deleted.")
+                show_notification(state, "Moved to .trash.")
 
         asyncio.ensure_future(_do())
 
@@ -3872,7 +3954,13 @@ def create_app(storage):
     # -- Editor screen --
     @kb.add("c-s", filter=is_editor & no_float)
     def _(event):
-        do_save()
+        # Second ^s within the window forces an overwrite after a
+        # changed-on-disk warning (same idiom as ^q / ^u).
+        if time.monotonic() - state.save_overwrite_pending < 3.0:
+            state.save_overwrite_pending = 0.0
+            do_save(force=True)
+        else:
+            do_save()
 
     # Plain arrows cancel selection; only fires when selection is active
     # so normal visual-line movement is unaffected.

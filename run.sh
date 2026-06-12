@@ -22,6 +22,10 @@ while true; do
     "$PY" "${SCRIPT_DIR}/journal.py" "$@"
     code=$?
 
+    if [ "$code" -eq 43 ]; then
+        continue              # plain relaunch (e.g. vault changed in Options)
+    fi
+
     if [ "$code" -ne 42 ]; then
         exit "$code"          # normal quit / shutdown / error
     fi

@@ -38,7 +38,7 @@ from prompt_toolkit.layout.dimension import Dimension as D
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.processors import Processor, Transformation
 from prompt_toolkit.lexers import Lexer as PtLexer
-from prompt_toolkit.styles import Style as PtStyle
+from prompt_toolkit.styles import DynamicStyle, Style as PtStyle
 from prompt_toolkit.utils import get_cwidth
 from prompt_toolkit.widgets import Button, Dialog, Label, TextArea
 
@@ -84,6 +84,48 @@ def _ensure_writable(d: "Path") -> bool:
     except OSError:
         pass
     return os.access(d, os.W_OK)
+
+
+_FOOT_INI = Path.home() / ".config" / "foot" / "foot.ini"
+
+
+def _get_foot_font_size(ini_path=None):
+    """Read the size= from foot.ini's font line, or None."""
+    p = ini_path or _FOOT_INI
+    try:
+        m = re.search(r"(?m)^font\s*=.*?size=(\d+)", p.read_text())
+        return int(m.group(1)) if m else None
+    except OSError:
+        return None
+
+
+def _set_foot_font_size(size, ini_path=None):
+    """Write size= into foot.ini's font line (foot has no runtime escape
+    for font changes, so this takes effect when the terminal restarts).
+    Returns True on success."""
+    p = ini_path or _FOOT_INI
+    try:
+        if p.exists():
+            text = p.read_text()
+            if re.search(r"(?m)^font\s*=.*size=\d+", text):
+                text = re.sub(r"(?m)^(font\s*=[^\n]*?size=)\d+",
+                              lambda m: m.group(1) + str(size), text)
+            elif re.search(r"(?m)^font\s*=", text):
+                text = re.sub(r"(?m)^(font\s*=[^\n]*)$",
+                              lambda m: m.group(1) + f":size={size}",
+                              text, count=1)
+            elif "[main]" in text:
+                text = text.replace(
+                    "[main]", f"[main]\nfont=Noto Sans Mono:size={size}", 1)
+            else:
+                text = f"[main]\nfont=Noto Sans Mono:size={size}\n" + text
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            text = f"[main]\nfont=Noto Sans Mono:size={size}\n"
+        p.write_text(text)
+        return True
+    except OSError:
+        return False
 
 
 class VaultStorage:
@@ -1278,6 +1320,10 @@ class AppState:
         # the system clipboard is synced best-effort in the background)
         self.internal_clipboard = ""
         self.system_clip_synced = True
+        # Options (persisted in config.json)
+        self.show_folders = False
+        self.color_scheme = "dark"
+        self.style = None  # active PtStyle, swapped live via DynamicStyle
         # File Browser web share
         self.filebrowser_proc = None
         self.share_url = ""
@@ -1514,6 +1560,9 @@ class InputDialog:
         self.text_area = TextArea(
             text=initial, multiline=False, width=D(preferred=40),
         )
+        # Start with the cursor at the end so editing a prefilled value
+        # (e.g. the vault path or font size) appends instead of prepending.
+        self.text_area.buffer.cursor_position = len(initial)
 
         def accept(_buf=None):
             val = self.text_area.text.strip()
@@ -1673,6 +1722,42 @@ Task List
   - [x] Done
   - [ ] Todo
 """
+
+
+class OptionsDialog:
+    """Options menu (journal screen). Resolves with the chosen setting
+    key, or None when dismissed. The caller applies the change and
+    re-opens the dialog so updated values are visible immediately."""
+
+    def __init__(self, items, initial_index=0):
+        self.future = asyncio.Future()
+        self.list = SelectableList(on_select=self._select)
+        self.list.set_items(items)
+        if items:
+            self.list.selected_index = min(initial_index, len(items) - 1)
+
+        @self.list._kb.add("escape", eager=True)
+        def _esc(event):
+            self.cancel()
+
+        self.dialog = Dialog(
+            title="Options",
+            body=HSplit([self.list]),
+            buttons=[Button(text="Close", handler=self.cancel)],
+            modal=True,
+            width=D(preferred=58, max=72),
+        )
+
+    def _select(self, key):
+        if not self.future.done():
+            self.future.set_result(key)
+
+    def cancel(self):
+        if not self.future.done():
+            self.future.set_result(None)
+
+    def __pt_container__(self):
+        return self.dialog
 
 
 class MarkdownHelpDialog:
@@ -2336,6 +2421,130 @@ APP_STYLE = {
     "find-match":             "bold #e0af68",
 }
 
+_LIGHT_STYLE = {
+    "":                       "#3a3a3a bg:#f2efe7",
+    "title":                  "#3a3a3a",
+    "status":                 "#8a857a bg:#e4e0d4",
+    "hint":                   "#a09a8c bg:#f2efe7",
+    "hint.sep":               "#c8c3b5",
+    "accent":                 "#a06b1f",
+    "input":                  "bg:#e4e0d4 #3a3a3a",
+    "editor":                 "",
+    "select-list":            "",
+    "select-list.selected":   "bg:#ddd8ca",
+    "select-list.empty":      "#a09a8c",
+    "preview":                "#8a857a",
+    "keybindings-panel":      "bg:#f2efe7",
+    "find-panel":             "bg:#f2efe7",
+    "form-label":             "#8a857a",
+    "dialog":                 "#3a3a3a bg:#f2efe7",
+    "dialog.body":            "#3a3a3a bg:#f2efe7",
+    "dialog text-area":       "#3a3a3a bg:#e4e0d4",
+    "dialog frame.label":     "#3a3a3a bold",
+    "dialog shadow":          "bg:#c8c3b5",
+    "button":                 "#3a3a3a bg:#ddd8ca",
+    "button.focused":         "#f2efe7 bg:#8a857a",
+    "label":                  "#3a3a3a",
+    "md.heading-marker":      "#c0bbac",
+    "md.heading":             "bold #a06b1f",
+    "md.list-marker":         "italic #b5afa0",
+    "md.quote-marker":        "italic #b5afa0",
+    "md.wikilink":            "#2f62b3",
+    "md.frontmatter":         "#b5afa0",
+    "md.bold":                "bold",
+    "md.italic":              "italic",
+    "md.code":                "#76705f",
+    "md.footnote":            "#2f62b3",
+    "md.link":                "#2f62b3",
+    "spell-error":            "bold #c03a2b",
+    "find-match":             "bold #a06b1f",
+}
+
+_GREEN_STYLE = {
+    "":                       "#3ddc55 bg:#0a0f0a",
+    "title":                  "#3ddc55",
+    "status":                 "#1f9c3a bg:#101a10",
+    "hint":                   "#1f9c3a bg:#0a0f0a",
+    "hint.sep":               "#14521e",
+    "accent":                 "#7dffa0",
+    "input":                  "bg:#101a10 #3ddc55",
+    "editor":                 "",
+    "select-list":            "",
+    "select-list.selected":   "bg:#143d1c",
+    "select-list.empty":      "#1f9c3a",
+    "preview":                "#27b045",
+    "keybindings-panel":      "bg:#0a0f0a",
+    "find-panel":             "bg:#0a0f0a",
+    "form-label":             "#27b045",
+    "dialog":                 "#3ddc55 bg:#0a0f0a",
+    "dialog.body":            "#3ddc55 bg:#0a0f0a",
+    "dialog text-area":       "#3ddc55 bg:#101a10",
+    "dialog frame.label":     "#3ddc55 bold",
+    "dialog shadow":          "bg:#143d1c",
+    "button":                 "#3ddc55 bg:#143d1c",
+    "button.focused":         "#0a0f0a bg:#3ddc55",
+    "label":                  "#3ddc55",
+    "md.heading-marker":      "#14521e",
+    "md.heading":             "bold #7dffa0",
+    "md.list-marker":         "italic #1f7a2d",
+    "md.quote-marker":        "italic #1f7a2d",
+    "md.wikilink":            "underline #7dffa0",
+    "md.frontmatter":         "#1f7a2d",
+    "md.bold":                "bold #7dffa0",
+    "md.italic":              "italic",
+    "md.code":                "#27b045",
+    "md.footnote":            "underline #7dffa0",
+    "md.link":                "underline #7dffa0",
+    "spell-error":            "bold reverse",
+    "find-match":             "bold reverse",
+}
+
+_AMBER_STYLE = {
+    "":                       "#ffb000 bg:#0f0a02",
+    "title":                  "#ffb000",
+    "status":                 "#9c6d08 bg:#1a1305",
+    "hint":                   "#9c6d08 bg:#0f0a02",
+    "hint.sep":               "#5c3f05",
+    "accent":                 "#ffd75e",
+    "input":                  "bg:#1a1305 #ffb000",
+    "editor":                 "",
+    "select-list":            "",
+    "select-list.selected":   "bg:#3d2c08",
+    "select-list.empty":      "#9c6d08",
+    "preview":                "#c28a10",
+    "keybindings-panel":      "bg:#0f0a02",
+    "find-panel":             "bg:#0f0a02",
+    "form-label":             "#c28a10",
+    "dialog":                 "#ffb000 bg:#0f0a02",
+    "dialog.body":            "#ffb000 bg:#0f0a02",
+    "dialog text-area":       "#ffb000 bg:#1a1305",
+    "dialog frame.label":     "#ffb000 bold",
+    "dialog shadow":          "bg:#3d2c08",
+    "button":                 "#ffb000 bg:#3d2c08",
+    "button.focused":         "#0f0a02 bg:#ffb000",
+    "label":                  "#ffb000",
+    "md.heading-marker":      "#5c3f05",
+    "md.heading":             "bold #ffd75e",
+    "md.list-marker":         "italic #8a6207",
+    "md.quote-marker":        "italic #8a6207",
+    "md.wikilink":            "underline #ffd75e",
+    "md.frontmatter":         "#8a6207",
+    "md.bold":                "bold #ffd75e",
+    "md.italic":              "italic",
+    "md.code":                "#c28a10",
+    "md.footnote":            "underline #ffd75e",
+    "md.link":                "underline #ffd75e",
+    "spell-error":            "bold reverse",
+    "find-match":             "bold reverse",
+}
+
+COLOR_SCHEMES = {
+    "dark": APP_STYLE,
+    "light": _LIGHT_STYLE,
+    "green": _GREEN_STYLE,
+    "amber": _AMBER_STYLE,
+}
+
 
 def create_app(storage):
     """Build and return the prompt_toolkit Application."""
@@ -2343,6 +2552,10 @@ def create_app(storage):
 
     cfg = _load_config()
     state.pinned_paths = set(cfg.get("pinned", []))
+    state.show_folders = bool(cfg.get("show_folders", False))
+    scheme = cfg.get("color_scheme", "dark")
+    state.color_scheme = scheme if scheme in COLOR_SCHEMES else "dark"
+    state.style = PtStyle.from_dict(COLOR_SCHEMES[state.color_scheme])
 
     # Load .bib cache on startup
     state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
@@ -2404,7 +2617,7 @@ def create_app(storage):
     def _browser_action_hints():
         S = ("class:hint.sep", "  ·  ")
         return [
-            ("class:hint", " (/) search  (e) exports"), S,
+            ("class:hint", " (/) search  (e) exports  (o) options"), S,
             ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"),
         ]
 
@@ -2463,6 +2676,7 @@ def create_app(storage):
     def _get_narrow_browser_right_hints():
         S = ("class:hint.sep", "  ·  ")
         hints = [("class:hint", "(e) exports"), S,
+                 ("class:hint", "(o) options"), S,
                  ("class:hint", "(^r) refresh"), S]
         hints.extend(_get_shutdown_hint())
         return hints
@@ -2575,7 +2789,10 @@ def create_app(storage):
                 except (ValueError, TypeError, OSError):
                     mod = ""
                 pin = "* " if e.name in state.pinned_paths else "  "
-                name_part = e.name
+                # Display-only: with folders hidden, show just the note
+                # name. Everything keys off the full path, so pin/rename/
+                # delete/open are unaffected.
+                name_part = e.name if state.show_folders else Path(e.name).name
                 items.append((str(e.path), f"{pin}{name_part}", mod))
             entry_list.set_items(items)
 
@@ -3963,6 +4180,103 @@ def create_app(storage):
     def _(event):
         toggle_exports()
 
+    def _options_items():
+        font = _get_foot_font_size()
+        return [
+            ("folders",
+             f"Show folder names: {'on' if state.show_folders else 'off'}"),
+            ("scheme", f"Color scheme: {state.color_scheme}"),
+            ("font",
+             f"Font size: {font if font is not None else 'default'}"
+             "  (applies on restart)"),
+            ("vault", f"Vault: {state.storage.vault_dir}"),
+        ]
+
+    @kb.add("o", filter=entry_list_focused)
+    def _(event):
+        if state.showing_exports:
+            return
+
+        async def _flow():
+            idx = 0
+            while True:
+                dlg = OptionsDialog(_options_items(), idx)
+                choice = await show_dialog_as_float(state, dlg)
+                if choice is None:
+                    return
+                idx = dlg.list.selected_index
+                if choice == "folders":
+                    state.show_folders = not state.show_folders
+                    cfg = _load_config()
+                    cfg["show_folders"] = state.show_folders
+                    _save_config(cfg)
+                    _render_entries(entry_search.text)
+                    update_preview()
+                elif choice == "scheme":
+                    order = list(COLOR_SCHEMES)
+                    state.color_scheme = order[
+                        (order.index(state.color_scheme) + 1) % len(order)]
+                    state.style = PtStyle.from_dict(
+                        COLOR_SCHEMES[state.color_scheme])
+                    cfg = _load_config()
+                    cfg["color_scheme"] = state.color_scheme
+                    _save_config(cfg)
+                    get_app().invalidate()
+                elif choice == "font":
+                    cur = _get_foot_font_size()
+                    d = InputDialog(
+                        title="Font size",
+                        label_text="Terminal font size (points):",
+                        initial=str(cur if cur is not None else 13),
+                        ok_text="Save")
+                    val = await show_dialog_as_float(state, d)
+                    if val:
+                        try:
+                            n = int(val)
+                        except ValueError:
+                            show_notification(state, "Not a number.")
+                            continue
+                        if not 6 <= n <= 32:
+                            show_notification(
+                                state, "Font size must be 6–32.")
+                            continue
+                        if _set_foot_font_size(n):
+                            show_notification(
+                                state, "Font size saved — takes effect on"
+                                " restart.")
+                        else:
+                            show_notification(
+                                state, "Could not write foot.ini.")
+                elif choice == "vault":
+                    d = InputDialog(
+                        title="Vault root",
+                        label_text="Path to vault:",
+                        initial=str(state.storage.vault_dir),
+                        ok_text="Save")
+                    val = await show_dialog_as_float(state, d)
+                    if val:
+                        p = Path(val).expanduser()
+                        if not p.is_dir():
+                            show_notification(
+                                state, "Not a directory — vault unchanged.")
+                            continue
+                        if p == state.storage.vault_dir:
+                            continue
+                        cfg = _load_config()
+                        cfg["vault"] = str(p)
+                        _save_config(cfg)
+                        if os.environ.get("JOURNAL_VAULT"):
+                            show_notification(
+                                state, "Saved, but JOURNAL_VAULT overrides"
+                                " it — unset the env var.")
+                            continue
+                        # Relaunch through the run.sh loop (exit code 43)
+                        # so everything rebinds to the new vault cleanly.
+                        event.app.exit(result="restart")
+                        return
+
+        asyncio.ensure_future(_flow())
+
     @kb.add("j", filter=entry_list_focused)
     def _(event):
         if state.showing_exports:
@@ -4568,7 +4882,8 @@ def create_app(storage):
 
     # ── Style ────────────────────────────────────────────────────────
 
-    style = PtStyle.from_dict(APP_STYLE)
+    # DynamicStyle so the Options menu can swap color schemes live.
+    style = DynamicStyle(lambda: state.style)
 
     # ── Build Application ────────────────────────────────────────────
 
@@ -4684,6 +4999,10 @@ def main() -> None:
     # normally, so the launcher loop just ends -- nothing auto-relaunches.
     if result == "update":
         sys.exit(42)
+    # Exit code 43 asks the launcher for a plain relaunch (no git pull) --
+    # used when an Options change (e.g. vault root) needs a clean restart.
+    if result == "restart":
+        sys.exit(43)
 
 
 if __name__ == "__main__":

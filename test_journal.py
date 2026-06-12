@@ -22,6 +22,7 @@ from journal import (
     _lua_coverpage_filter, _lua_header_filter,
     _postprocess_docx, _REFS_DIR,
     _list_continuation, _ensure_writable, MarkdownLexer,
+    _get_foot_font_size, _set_foot_font_size, COLOR_SCHEMES,
 )
 
 
@@ -530,6 +531,42 @@ def test_clipboard_paste_no_clobber():
     print("  Paste retry without clipboard clobber OK")
 
 
+def test_foot_font_size():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ini = Path(tmpdir) / "foot.ini"
+        # Existing size= gets replaced, other params preserved
+        ini.write_text("[main]\nfont=Noto Sans Mono:size=13:antialias=true\n")
+        assert _set_foot_font_size(16, ini) is True
+        assert "font=Noto Sans Mono:size=16:antialias=true" in ini.read_text()
+        assert _get_foot_font_size(ini) == 16
+        # Font line without size= gets one appended
+        ini.write_text("[main]\nfont=Noto Sans Mono\n")
+        _set_foot_font_size(14, ini)
+        assert _get_foot_font_size(ini) == 14
+        # [main] without a font line
+        ini.write_text("[main]\npad=2x2\n")
+        _set_foot_font_size(12, ini)
+        assert _get_foot_font_size(ini) == 12
+        assert "pad=2x2" in ini.read_text()
+        # Missing file gets created
+        ini2 = Path(tmpdir) / "sub" / "foot.ini"
+        assert _set_foot_font_size(15, ini2) is True
+        assert _get_foot_font_size(ini2) == 15
+    print("  foot.ini font-size rewrite OK")
+
+
+def test_color_schemes():
+    schemes = list(COLOR_SCHEMES)
+    assert schemes == ["dark", "light", "green", "amber"], schemes
+    dark_keys = set(COLOR_SCHEMES["dark"])
+    for name, style in COLOR_SCHEMES.items():
+        assert set(style) == dark_keys, (
+            f"{name} keys differ: {set(style) ^ dark_keys}")
+        for key, val in style.items():
+            assert isinstance(val, str), f"{name}/{key} not a string"
+    print("  Scheme key parity across dark/light/green/amber OK")
+
+
 if __name__ == "__main__":
     print("Testing data models...")
     test_entry_dataclass()
@@ -598,6 +635,14 @@ if __name__ == "__main__":
     print("Testing clipboard paste retry...")
     test_clipboard_paste_no_clobber()
     print("  \u2713 Clipboard paste tests passed\n")
+
+    print("Testing foot.ini font size...")
+    test_foot_font_size()
+    print("  \u2713 foot.ini tests passed\n")
+
+    print("Testing color schemes...")
+    test_color_schemes()
+    print("  \u2713 Color scheme tests passed\n")
 
     print("=" * 50)
     print("All tests passed!")

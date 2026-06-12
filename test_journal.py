@@ -536,6 +536,35 @@ def test_clipboard_paste_no_clobber():
     print("  Paste retry without clipboard clobber OK")
 
 
+def test_trash_roundtrip():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        storage = VaultStorage(Path(tmpdir))
+        e = storage.create_entry("Note")
+        e.path.write_text("body")
+        storage.delete_entry(e)
+        trashed = storage.list_trash()
+        assert [p.name for p in trashed] == ["Note.md"]
+        # Restore returns it to the vault root
+        dest = storage.restore_trashed(trashed[0])
+        assert dest == Path(tmpdir) / "Note.md" and dest.read_text() == "body"
+        assert storage.list_trash() == []
+        # Restore collision bumps
+        e2 = storage.create_entry("Note2")
+        e2.path.write_text("x")
+        storage.delete_entry(e2)
+        (Path(tmpdir) / "Note2.md").write_text("occupied")
+        dest2 = storage.restore_trashed(storage.list_trash()[0])
+        assert dest2.name == "Note2 2.md"
+        # Empty trash
+        for name in ("a", "b"):
+            en = storage.create_entry(name)
+            en.path.write_text(name)
+            storage.delete_entry(en)
+        assert storage.empty_trash() == 2
+        assert storage.list_trash() == []
+    print("  Trash list/restore/empty OK")
+
+
 def test_foot_font_size():
     with tempfile.TemporaryDirectory() as tmpdir:
         ini = Path(tmpdir) / "foot.ini"
@@ -640,6 +669,10 @@ if __name__ == "__main__":
     print("Testing clipboard paste retry...")
     test_clipboard_paste_no_clobber()
     print("  \u2713 Clipboard paste tests passed\n")
+
+    print("Testing trash round-trip...")
+    test_trash_roundtrip()
+    print("  ✓ Trash tests passed\n")
 
     print("Testing foot.ini font size...")
     test_foot_font_size()

@@ -207,6 +207,45 @@ class VaultStorage:
             counter += 1
         shutil.move(str(entry.path), str(dest))
 
+    def list_trash(self) -> list[Path]:
+        """Trashed notes, newest first."""
+        trash = self.vault_dir / ".trash"
+        if not trash.is_dir():
+            return []
+        files = [p for p in trash.glob("*.md") if not p.name.startswith(".")]
+
+        def mtime(p):
+            try:
+                return p.stat().st_mtime
+            except OSError:
+                return 0.0
+
+        files.sort(key=mtime, reverse=True)
+        return files
+
+    def restore_trashed(self, trash_path: Path) -> Path:
+        """Move a trashed note back into the vault root (the origin
+        folder isn't recorded), bumping the name on collision."""
+        dest = self.vault_dir / trash_path.name
+        counter = 2
+        while dest.exists():
+            dest = self.vault_dir / (
+                f"{trash_path.stem} {counter}{trash_path.suffix}")
+            counter += 1
+        shutil.move(str(trash_path), str(dest))
+        return dest
+
+    def empty_trash(self) -> int:
+        """Permanently delete all trashed notes; returns the count."""
+        n = 0
+        for p in self.list_trash():
+            try:
+                p.unlink()
+                n += 1
+            except OSError:
+                pass
+        return n
+
 
 # ════════════════════════════════════════════════════════════════════════
 #  PDF Export Helpers
@@ -1723,6 +1762,59 @@ Task List
   - [x] Done
   - [ ] Todo
 """
+
+
+class TrashDialog:
+    """Trash browser. Enter restores the selected note, d deletes it
+    forever (caller confirms). Resolves with ('restore', path_str),
+    ('delete', path_str), or None when dismissed."""
+
+    def __init__(self, files, initial_index=0):
+        self.future = asyncio.Future()
+        self.list = SelectableList(on_select=self._restore)
+        items = []
+        for p in files:
+            try:
+                mod = datetime.fromtimestamp(p.stat().st_mtime).strftime(
+                    "%Y-%m-%d %H:%M")
+            except (OSError, ValueError):
+                mod = ""
+            items.append((str(p), f"  {p.stem}", mod + " "))
+        if not items:
+            items = [("__empty__", "Trash is empty.")]
+        self.list.set_items(items)
+        self.list.selected_index = min(initial_index, len(items) - 1)
+
+        @self.list._kb.add("escape", eager=True)
+        def _esc(event):
+            self.cancel()
+
+        @self.list._kb.add("d")
+        def _del(event):
+            idx = self.list.selected_index
+            if idx < len(self.list.items):
+                key = self.list.items[idx][0]
+                if key != "__empty__" and not self.future.done():
+                    self.future.set_result(("delete", key))
+
+        self.dialog = Dialog(
+            title="Trash — enter: restore · d: delete forever",
+            body=HSplit([self.list]),
+            buttons=[Button(text="Close", handler=self.cancel)],
+            modal=True,
+            width=D(preferred=64, max=76),
+        )
+
+    def _restore(self, key):
+        if key != "__empty__" and not self.future.done():
+            self.future.set_result(("restore", key))
+
+    def cancel(self):
+        if not self.future.done():
+            self.future.set_result(None)
+
+    def __pt_container__(self):
+        return self.dialog
 
 
 class PowerDialog:
@@ -4224,6 +4316,9 @@ def create_app(storage):
              f"Font size: {font if font is not None else 'default'}"
              "  (applies on restart)"),
             ("vault", f"Vault: {state.storage.vault_dir}"),
+            ("trash",
+             f"View trash ({len(state.storage.list_trash())})"),
+            ("empty_trash", "Empty trash"),
         ]
 
     @kb.add("o", filter=entry_list_focused)
@@ -4308,6 +4403,45 @@ def create_app(storage):
                         # so everything rebinds to the new vault cleanly.
                         event.app.exit(result="restart")
                         return
+                elif choice == "trash":
+                    tidx = 0
+                    while True:
+                        files = state.storage.list_trash()
+                        tdlg = TrashDialog(files, tidx)
+                        action = await show_dialog_as_float(state, tdlg)
+                        if action is None:
+                            break
+                        tidx = tdlg.list.selected_index
+                        verb, key = action
+                        p = Path(key)
+                        if verb == "restore":
+                            dest = state.storage.restore_trashed(p)
+                            refresh_entries(entry_search.text)
+                            update_preview()
+                            show_notification(
+                                state, f"Restored '{dest.stem}'.")
+                        else:
+                            ok = await show_dialog_as_float(
+                                state,
+                                ConfirmDialog(
+                                    f"Delete '{p.stem}' forever?"))
+                            if ok:
+                                try:
+                                    p.unlink()
+                                except OSError:
+                                    pass
+                elif choice == "empty_trash":
+                    n = len(state.storage.list_trash())
+                    if n == 0:
+                        show_notification(state, "Trash is empty.")
+                        continue
+                    ok = await show_dialog_as_float(
+                        state,
+                        ConfirmDialog(
+                            f"Delete {n} trashed note(s) forever?"))
+                    if ok:
+                        state.storage.empty_trash()
+                        show_notification(state, "Trash emptied.")
 
         asyncio.ensure_future(_flow())
 

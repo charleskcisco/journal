@@ -4411,7 +4411,7 @@ def create_app(storage):
                     _save_config(cfg)
                     get_app().invalidate()
                 elif choice == "width":
-                    widths = [0, 60, 70, 80, 90, 100]
+                    widths = [0, 60, 80, 100, 120]
                     cur = (widths.index(state.editor_width)
                            if state.editor_width in widths else 0)
                     state.editor_width = widths[(cur + 1) % len(widths)]

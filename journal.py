@@ -1431,6 +1431,18 @@ async def show_dialog_as_float(state, dialog):
     return result
 
 
+def _aspell_dicts():
+    """Installed aspell dictionary names, or [] when unavailable."""
+    try:
+        r = subprocess.run(["aspell", "dump", "dicts"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return sorted(set(r.stdout.split()))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return []
+
+
 def _detect_printers():
     """Return available CUPS destination names.
 
@@ -2472,7 +2484,8 @@ class SpellCheckPanel:
     async def _add_to_dict_async(self, word):
         try:
             proc = await asyncio.create_subprocess_exec(
-                "aspell", "-a", "--lang=en_US",
+                "aspell", "-a",
+                f"--lang={self.state.spell_lang or 'en_US'}",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -3540,7 +3553,9 @@ def create_app(storage):
 
     async def auto_save_loop():
         while state.screen == "editor":
-            await asyncio.sleep(30)
+            await asyncio.sleep(state.autosave_secs or 30)
+            if not state.autosave_secs:
+                continue  # timer off; manual saves unaffected
             if state.editor_dirty and state.current_entry:
                 if _disk_changed():
                     # Don't silently overwrite an external change; leave
@@ -4355,6 +4370,11 @@ def create_app(storage):
             ("width",
              f"Editor width: {state.editor_width or 'off'}"),
             ("scheme", f"Color scheme: {state.color_scheme}"),
+            ("autosave",
+             "Auto-save: "
+             + (f"{state.autosave_secs}s" if state.autosave_secs else "off")),
+            ("spell",
+             f"Spell language: {state.spell_lang or 'default'}"),
             ("font",
              f"Font size: {font if font is not None else 'default'}"
              "  (applies on restart)"),
@@ -4399,6 +4419,28 @@ def create_app(storage):
                     cfg["editor_width"] = state.editor_width
                     _save_config(cfg)
                     get_app().invalidate()
+                elif choice == "autosave":
+                    secs = [0, 10, 30, 60, 120]
+                    cur = (secs.index(state.autosave_secs)
+                           if state.autosave_secs in secs else secs.index(30))
+                    state.autosave_secs = secs[(cur + 1) % len(secs)]
+                    cfg = _load_config()
+                    cfg["autosave_secs"] = state.autosave_secs
+                    _save_config(cfg)
+                elif choice == "spell":
+                    dicts = _aspell_dicts()
+                    if not dicts:
+                        show_notification(
+                            state, "aspell not found — install it for"
+                            " spell check.")
+                        continue
+                    langs = [""] + dicts   # "" = aspell default
+                    cur = (langs.index(state.spell_lang)
+                           if state.spell_lang in langs else 0)
+                    state.spell_lang = langs[(cur + 1) % len(langs)]
+                    cfg = _load_config()
+                    cfg["spell_lang"] = state.spell_lang
+                    _save_config(cfg)
                 elif choice == "scheme":
                     order = list(COLOR_SCHEMES)
                     state.color_scheme = order[
@@ -4833,7 +4875,8 @@ def create_app(storage):
                     spell_text = re.sub(r"@\S+", lambda m: " " * len(m.group()), spell_text)
                     try:
                         proc = await asyncio.create_subprocess_exec(
-                            "aspell", "list", "--lang=en_US",
+                            "aspell", "list",
+                            f"--lang={state.spell_lang or 'en_US'}",
                             stdin=asyncio.subprocess.PIPE,
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.DEVNULL,
@@ -4852,7 +4895,8 @@ def create_app(storage):
                     sugg_map = {}
                     try:
                         proc2 = await asyncio.create_subprocess_exec(
-                            "aspell", "-a", "--lang=en_US",
+                            "aspell", "-a",
+                            f"--lang={state.spell_lang or 'en_US'}",
                             stdin=asyncio.subprocess.PIPE,
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.DEVNULL,

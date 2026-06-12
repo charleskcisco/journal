@@ -2678,8 +2678,7 @@ def create_app(storage):
     def _get_narrow_browser_right_hints():
         S = ("class:hint.sep", "  ·  ")
         hints = [("class:hint", "(e) exports"), S,
-                 ("class:hint", "(o) options"), S,
-                 ("class:hint", "(^r) refresh"), S]
+                 ("class:hint", "(o) options  (^r) refresh"), S]
         hints.extend(_get_shutdown_hint())
         return hints
 

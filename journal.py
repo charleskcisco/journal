@@ -931,7 +931,9 @@ class MarkdownLexer(PtLexer):
         (re.compile(r'\*\*[^*]+\*\*'), 'class:md.bold'),
         (re.compile(r'(?<!\*)\*(?!\*)[^*]+?(?<!\*)\*(?!\*)'), 'class:md.italic'),
         (re.compile(r'`[^`]+`'), 'class:md.code'),
-        (re.compile(r'\^\[[^\]]*\]'), 'class:md.footnote'),
+        # Footnote body may contain escaped brackets (\[ \]); only an
+        # unescaped ] terminates the highlight.
+        (re.compile(r'\^\[(?:[^\]\\]|\\.)*\]'), 'class:md.footnote'),
         (re.compile(r'\[\[[^\]]+\]\]'), 'class:md.wikilink'),
         (re.compile(r'\[[^\]]+\]\([^)]+\)'), 'class:md.link'),
     ]

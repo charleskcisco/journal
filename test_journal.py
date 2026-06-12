@@ -501,6 +501,11 @@ def test_markdown_lexer():
     # Leading --- with no closing fence is not treated as frontmatter
     gl2 = MarkdownLexer().lex_document(Document("---\nno close"))
     assert gl2(0) == [("", "---")]
+    # Footnote highlight is only terminated by an UNESCAPED ]
+    gl3 = MarkdownLexer().lex_document(
+        Document("x ^[whole \\[Mosaic\\] law, see \\[ὅλον\\]] after"))
+    fn = [t for s, t in gl3(0) if s == "class:md.footnote"]
+    assert fn == ["^[whole \\[Mosaic\\] law, see \\[ὅλον\\]]"], fn
     print("  Wikilink/quote/frontmatter lexing OK")
 
 

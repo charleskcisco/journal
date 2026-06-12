@@ -1308,7 +1308,6 @@ class AppState:
         self.find_panel = None
         self.show_spell_panel = False
         self.spell_panel = None
-        self.shutdown_pending = 0.0
         # Self-update (git checkout only)
         self.update_available = False
         self.update_count = 0
@@ -1724,6 +1723,42 @@ Task List
   - [x] Done
   - [ ] Todo
 """
+
+
+class PowerDialog:
+    """Shut down / reboot confirmation. Resolves with 'shutdown',
+    'reboot', or None when cancelled."""
+
+    def __init__(self):
+        self.future = asyncio.Future()
+        self.list = SelectableList(on_select=self._select)
+        self.list.set_items([
+            ("shutdown", "Shut down"),
+            ("reboot", "Reboot"),
+        ])
+
+        @self.list._kb.add("escape", eager=True)
+        def _esc(event):
+            self.cancel()
+
+        self.dialog = Dialog(
+            title="Power",
+            body=HSplit([self.list]),
+            buttons=[Button(text="Cancel", handler=self.cancel)],
+            modal=True,
+            width=D(preferred=40, max=50),
+        )
+
+    def _select(self, key):
+        if not self.future.done():
+            self.future.set_result(key)
+
+    def cancel(self):
+        if not self.future.done():
+            self.future.set_result(None)
+
+    def __pt_container__(self):
+        return self.dialog
 
 
 class OptionsDialog:
@@ -2609,8 +2644,6 @@ def create_app(storage):
         now = time.monotonic()
         if now - state.quit_pending < 2.0:
             return [("class:accent bold", " (^q) press again to quit ")]
-        if state.shutdown_pending and now - state.shutdown_pending < 2.0:
-            return [("class:accent bold", " (^s) press again to shut down ")]
         return [("class:hint", " (^s) shut down ")]
 
     # Action-hint segments shared by the wide top bar (right-aligned,
@@ -4349,13 +4382,18 @@ def create_app(storage):
 
     @kb.add("c-s", filter=is_journal & no_float)
     def _(event):
-        now = time.monotonic()
-        if now - state.shutdown_pending < 2.0:
-            subprocess.Popen(['shutdown', '-h', 'now'])
-            event.app.exit()
-        else:
-            state.shutdown_pending = now
-            show_notification(state, "Press ^s again to shut down.", duration=2.0)
+        # The dialog itself is the confirmation (replaces the old
+        # double-press idiom) and adds a reboot option.
+        async def _flow():
+            choice = await show_dialog_as_float(state, PowerDialog())
+            if choice == "shutdown":
+                subprocess.Popen(["shutdown", "-h", "now"])
+                get_app().exit()
+            elif choice == "reboot":
+                subprocess.Popen(["shutdown", "-r", "now"])
+                get_app().exit()
+
+        asyncio.ensure_future(_flow())
 
     @kb.add("c-u", filter=is_journal & no_float)
     def _(event):

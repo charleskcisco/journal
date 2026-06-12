@@ -1274,6 +1274,10 @@ class AppState:
         self.editor_disk_mtime = 0.0
         self.save_overwrite_pending = 0.0
         self.autosave_conflict_notified = False
+        # In-app clipboard register (source of truth for cut/copy/paste;
+        # the system clipboard is synced best-effort in the background)
+        self.internal_clipboard = ""
+        self.system_clip_synced = True
         # File Browser web share
         self.filebrowser_proc = None
         self.share_url = ""
@@ -2848,13 +2852,37 @@ def create_app(storage):
     # ── Clipboard (Ctrl+C / Ctrl+V) on editor control ────────────
     _editor_cb_kb = KeyBindings()
 
+    def _clipboard_store(text):
+        # The in-app register is the source of truth: instant and
+        # infallible, so cut/copy never block or fail. The system
+        # clipboard (wl-copy/xclip -- slow to spawn and flaky under
+        # cage on the deck) is synced best-effort in the background.
+        state.internal_clipboard = text
+        state.system_clip_synced = False
+
+        async def _push():
+            loop = asyncio.get_running_loop()
+            ok = await loop.run_in_executor(None, _clipboard_copy, text)
+            if ok:
+                state.system_clip_synced = True
+            # Quiet on failure: paste falls back to the in-app register.
+
+        asyncio.ensure_future(_push())
+
     @_editor_cb_kb.add("c-v")
     def _paste(event):
+        # Prefer the in-app register when we know the system clipboard
+        # doesn't hold our latest copy (background push didn't land).
+        if not state.system_clip_synced and state.internal_clipboard:
+            event.current_buffer.insert_text(state.internal_clipboard)
+            return
         text = _clipboard_paste()
+        if not text:
+            text = state.internal_clipboard
         if text:
             event.current_buffer.insert_text(text)
 
-    @_editor_cb_kb.add("c-c")
+    @_editor_cb_kb.add("c-c", eager=True)
     def _copy(event):
         buf = event.current_buffer
         if buf.selection_state:
@@ -2864,10 +2892,8 @@ def create_app(storage):
                 start, end = end, start
             selected = buf.text[start:end]
             if selected:
-                if _clipboard_copy(selected):
-                    show_notification(state, "Copied.")
-                else:
-                    show_notification(state, "Clipboard unavailable.")
+                _clipboard_store(selected)
+                show_notification(state, "Copied.")
             buf.exit_selection()
 
     @_editor_cb_kb.add("c-a")
@@ -2877,7 +2903,10 @@ def create_app(storage):
         buf.start_selection()
         buf.cursor_position = len(buf.text)
 
-    @_editor_cb_kb.add("c-x")
+    # eager: c-x and c-c are prefixes of built-in emacs sequences
+    # (c-x c-e, c-c c-c, ...), so without eager a lone press sits in the
+    # key processor for the full 1s timeout before dispatching.
+    @_editor_cb_kb.add("c-x", eager=True)
     def _cut(event):
         buf = event.current_buffer
         if buf.selection_state:
@@ -2888,12 +2917,13 @@ def create_app(storage):
             selected = buf.text[start:end]
             buf.exit_selection()
             if selected:
-                if _clipboard_copy(selected):
-                    new_text = buf.text[:start] + buf.text[end:]
-                    buf.set_document(Document(new_text, start), bypass_readonly=True)
-                    show_notification(state, "Cut.")
-                else:
-                    show_notification(state, "Clipboard unavailable — text not deleted.")
+                # Deleting is always safe: the text is in the in-app
+                # register (and undo exists), so the cut no longer waits
+                # on -- or fails with -- the system clipboard.
+                _clipboard_store(selected)
+                new_text = buf.text[:start] + buf.text[end:]
+                buf.set_document(Document(new_text, start), bypass_readonly=True)
+                show_notification(state, "Cut.")
 
     @_editor_cb_kb.add("backspace")
     def _backspace(event):
@@ -2924,14 +2954,18 @@ def create_app(storage):
         buf = event.current_buffer
         if not buf.selection_state:
             buf.start_selection()
-        buf.cursor_up()
+        # Move by VISUAL line (word-wrap aware), like the plain arrows --
+        # cursor_up() moves by logical line and would leap a whole
+        # wrapped paragraph. (_visual_cursor_up is defined later in this
+        # scope; closures resolve it at call time.)
+        _visual_cursor_up()
 
     @_editor_cb_kb.add("s-down")
     def _sel_down(event):
         buf = event.current_buffer
         if not buf.selection_state:
             buf.start_selection()
-        buf.cursor_down()
+        _visual_cursor_down()
 
     @_editor_cb_kb.add("s-left")
     def _sel_left(event):
@@ -4066,12 +4100,12 @@ def create_app(storage):
     @kb.add("up", filter=editor_focused & editor_has_selection)
     def _(event):
         editor_area.buffer.exit_selection()
-        editor_area.buffer.cursor_up()
+        _visual_cursor_up()
 
     @kb.add("down", filter=editor_focused & editor_has_selection)
     def _(event):
         editor_area.buffer.exit_selection()
-        editor_area.buffer.cursor_down()
+        _visual_cursor_down()
 
     @kb.add("left", filter=editor_focused & editor_has_selection)
     def _(event):
@@ -4348,8 +4382,11 @@ def create_app(storage):
         ri = editor_area.window.render_info
         return ri.window_width if ri else 60
 
-    @kb.add("up", filter=editor_focused)
-    def _(event):
+    # Visual (word-wrap-aware) vertical movement, shared by the plain
+    # arrows and shift+arrow selection so both move by one *visual* line.
+    # prompt_toolkit's cursor_up/down move by logical line, which on a
+    # wrapped paragraph jumps the whole paragraph.
+    def _visual_cursor_up():
         buf = editor_area.buffer
         doc = buf.document
         row, col = doc.cursor_position_row, doc.cursor_position_col
@@ -4376,8 +4413,7 @@ def create_app(storage):
             new_col = min(last_start + visual_col, len(prev_line))
             buf.cursor_position = doc.translate_row_col_to_index(row - 1, new_col)
 
-    @kb.add("down", filter=editor_focused)
-    def _(event):
+    def _visual_cursor_down():
         buf = editor_area.buffer
         doc = buf.document
         row, col = doc.cursor_position_row, doc.cursor_position_col
@@ -4402,6 +4438,14 @@ def create_app(storage):
             first_end = next_starts[1] - 1 if len(next_starts) > 1 else len(next_line)
             new_col = min(visual_col, first_end)
             buf.cursor_position = doc.translate_row_col_to_index(row + 1, new_col)
+
+    @kb.add("up", filter=editor_focused)
+    def _(event):
+        _visual_cursor_up()
+
+    @kb.add("down", filter=editor_focused)
+    def _(event):
+        _visual_cursor_down()
 
     @kb.add("c-up", filter=editor_focused)
     def _(event):

@@ -1364,6 +1364,10 @@ class AppState:
         self.show_folders = False
         self.color_scheme = "dark"
         self.style = None  # active PtStyle, swapped live via DynamicStyle
+        self.editor_width = 0      # 0 = full width
+        self.show_preview = True   # wide-layout preview pane
+        self.autosave_secs = 30    # 0 = timer off (manual saves unaffected)
+        self.spell_lang = ""       # "" = aspell default dictionary
         # File Browser web share
         self.filebrowser_proc = None
         self.share_url = ""
@@ -2685,6 +2689,16 @@ def create_app(storage):
     scheme = cfg.get("color_scheme", "dark")
     state.color_scheme = scheme if scheme in COLOR_SCHEMES else "dark"
     state.style = PtStyle.from_dict(COLOR_SCHEMES[state.color_scheme])
+    try:
+        state.editor_width = int(cfg.get("editor_width", 0) or 0)
+    except (TypeError, ValueError):
+        state.editor_width = 0
+    state.show_preview = bool(cfg.get("show_preview", True))
+    try:
+        state.autosave_secs = int(cfg.get("autosave_secs", 30))
+    except (TypeError, ValueError):
+        state.autosave_secs = 30
+    state.spell_lang = str(cfg.get("spell_lang", "") or "")
 
     # Load .bib cache on startup
     state.bib_entries, state.bib_path, state.bib_mtime, state.bib_error = (
@@ -3137,6 +3151,16 @@ def create_app(storage):
         journal_status_window,
     ])
 
+    # Wide layout without the preview pane (Options: "Preview pane: off").
+    journal_view_nopreview = HSplit([
+        title_hints_window,
+        Window(height=1, char="─", style="class:hint"),
+        entry_list,
+        Window(height=1, char="─", style="class:hint"),
+        entry_search,
+        journal_status_window,
+    ])
+
     exports_view = HSplit([
         exports_title_window,
         Window(height=1, char="─", style="class:hint"),
@@ -3174,7 +3198,9 @@ def create_app(storage):
         narrow = _is_narrow()
         if state.showing_exports:
             return exports_view_narrow if narrow else exports_view
-        return journal_view_narrow if narrow else journal_view
+        if narrow:
+            return journal_view_narrow
+        return journal_view if state.show_preview else journal_view_nopreview
 
     journal_screen = DynamicContainer(get_journal_screen)
 
@@ -3455,6 +3481,7 @@ def create_app(storage):
             state.show_find_panel, id(state.find_panel) if state.show_find_panel else 0,
             state.show_keybindings,
             _keybindings_panel_width() if state.show_keybindings else 0,
+            state.editor_width,
         )
         if _editor_body_cache["sig"] == sig:
             return _editor_body_cache["container"]
@@ -3465,7 +3492,19 @@ def create_app(storage):
         if state.show_find_panel and state.find_panel:
             parts.append(state.find_panel)
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
-        parts.append(_editor_with_margin)
+        if state.editor_width:
+            # Centered measure column: flexible spacers either side of a
+            # capped editor. Wrap and visual navigation read the rendered
+            # width (render_info), so they adapt automatically.
+            parts.append(VSplit([
+                Window(),
+                HSplit([editor_area],
+                       width=D(preferred=state.editor_width,
+                               max=state.editor_width)),
+                Window(),
+            ]))
+        else:
+            parts.append(_editor_with_margin)
         if state.show_keybindings:
             parts.append(Window(width=1, char="\u2502", style="class:hint"))
             parts.append(Window(
@@ -4311,6 +4350,10 @@ def create_app(storage):
         return [
             ("folders",
              f"Show folder names: {'on' if state.show_folders else 'off'}"),
+            ("preview",
+             f"Preview pane: {'on' if state.show_preview else 'off'}"),
+            ("width",
+             f"Editor width: {state.editor_width or 'off'}"),
             ("scheme", f"Color scheme: {state.color_scheme}"),
             ("font",
              f"Font size: {font if font is not None else 'default'}"
@@ -4341,6 +4384,21 @@ def create_app(storage):
                     _save_config(cfg)
                     _render_entries(entry_search.text)
                     update_preview()
+                elif choice == "preview":
+                    state.show_preview = not state.show_preview
+                    cfg = _load_config()
+                    cfg["show_preview"] = state.show_preview
+                    _save_config(cfg)
+                    get_app().invalidate()
+                elif choice == "width":
+                    widths = [0, 60, 70, 80, 90, 100]
+                    cur = (widths.index(state.editor_width)
+                           if state.editor_width in widths else 0)
+                    state.editor_width = widths[(cur + 1) % len(widths)]
+                    cfg = _load_config()
+                    cfg["editor_width"] = state.editor_width
+                    _save_config(cfg)
+                    get_app().invalidate()
                 elif choice == "scheme":
                     order = list(COLOR_SCHEMES)
                     state.color_scheme = order[

@@ -9,9 +9,13 @@ echo "=== Journal App Setup ==="
 echo ""
 
 # System update
+#   apt upgrade is allowed to fail without aborting: some third-party
+#   packages (e.g. firmware-b43-installer) download firmware from
+#   external sites in their post-install and break on a flaky network.
+#   That must not take Journal's setup down with it.
 echo "Updating system packages..."
 sudo apt update
-sudo apt upgrade -y
+sudo apt upgrade -y || echo "WARNING: some packages failed to upgrade — continuing."
 
 # System packages
 #   micro ranger        — fallback editor + file manager
@@ -32,7 +36,13 @@ sudo apt install -y \
     fonts-noto-core \
     wl-clipboard xclip \
     aspell aspell-en \
-    python3 python3-pip python3-venv
+    python3 python3-pip python3-venv \
+    || echo "WARNING: some packages failed to install — continuing."
+
+# Configure anything left half-installed (e.g. a firmware package whose
+# external download failed), so it doesn't block later apt runs. The
+# broken package stays broken but no longer aborts setup.
+sudo dpkg --configure -a || true
 
 # File Browser — optional web share of the vault, toggled from Journal's
 # exports screen (press s). Single Go binary; the official script picks

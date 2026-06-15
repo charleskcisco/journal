@@ -22,6 +22,7 @@ sudo apt upgrade -y || echo "WARNING: some packages failed to upgrade — contin
 #   pandoc libreoffice  — export pipeline (.md -> .docx -> .pdf)
 #   cups cups-client    — printing (lp)
 #   git cage foot       — self-update + kiosk Wayland compositor + terminal
+#   xwayland            — cage requires it at startup or it won't launch
 #   fonts-noto-core     — Noto Sans Mono (see support/foot.ini)
 #   wl-clipboard xclip  — clipboard (Wayland / X11)
 #   aspell aspell-en    — spell check
@@ -33,7 +34,7 @@ sudo apt install -y \
     micro ranger \
     pandoc libreoffice \
     cups cups-client \
-    git cage foot \
+    git cage foot xwayland \
     fonts-noto-core \
     wl-clipboard xclip \
     aspell aspell-en \

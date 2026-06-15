@@ -25,6 +25,7 @@ sudo apt upgrade -y || echo "WARNING: some packages failed to upgrade — contin
 #   fonts-noto-core     — Noto Sans Mono (see support/foot.ini)
 #   wl-clipboard xclip  — clipboard (Wayland / X11)
 #   aspell aspell-en    — spell check
+#   network-manager     — Wi-Fi scan/connect from Options (nmcli)
 #   python3 *           — runtime
 echo "Installing required packages..."
 sudo apt install -y \
@@ -36,6 +37,7 @@ sudo apt install -y \
     fonts-noto-core \
     wl-clipboard xclip \
     aspell aspell-en \
+    network-manager \
     python3 python3-pip python3-venv \
     || echo "WARNING: some packages failed to install — continuing."
 

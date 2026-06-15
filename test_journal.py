@@ -536,6 +536,33 @@ def test_clipboard_paste_no_clobber():
     print("  Paste retry without clipboard clobber OK")
 
 
+def test_nmcli_parse():
+    from journal import (_parse_nmcli_terse, _parse_wifi_list,
+                         _wifi_signal_bars)
+    # Escaped colon in an SSID survives the terse split
+    assert _parse_nmcli_terse(r"*:My\:SSID:WPA2:72") == \
+        ["*", "My:SSID", "WPA2", "72"]
+    assert _parse_nmcli_terse(r":Plain\\Net::55") == \
+        ["", r"Plain\Net", "", "55"]
+    sample = "\n".join([
+        "*:HomeFiber:WPA2:80",
+        " :HomeFiber:WPA2:40",     # weaker dup -> merged away
+        " :Cafe Open::55",          # open network
+        " ::WPA2:90",               # hidden -> skipped
+        r" :NETGEAR\:guest:WPA2:30",
+    ])
+    nets = _parse_wifi_list(sample)
+    assert len(nets) == 3                       # hidden skipped, dup merged
+    assert nets[0]["ssid"] == "HomeFiber" and nets[0]["active"]  # active first
+    assert nets[0]["signal"] == 80              # strongest dup kept
+    cafe = [n for n in nets if n["ssid"] == "Cafe Open"][0]
+    assert cafe["secured"] is False
+    assert any(n["ssid"] == "NETGEAR:guest" for n in nets)
+    assert _wifi_signal_bars(80).count("▮") == 4
+    assert _wifi_signal_bars(5).count("▮") == 1
+    print("  nmcli terse/wifi parsing OK")
+
+
 def test_trash_roundtrip():
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = VaultStorage(Path(tmpdir))
@@ -669,6 +696,10 @@ if __name__ == "__main__":
     print("Testing clipboard paste retry...")
     test_clipboard_paste_no_clobber()
     print("  \u2713 Clipboard paste tests passed\n")
+
+    print("Testing nmcli parsing...")
+    test_nmcli_parse()
+    print("  ✓ nmcli parse tests passed\n")
 
     print("Testing trash round-trip...")
     test_trash_roundtrip()

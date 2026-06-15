@@ -1443,6 +1443,134 @@ def _aspell_dicts():
     return []
 
 
+def _nmcli_available():
+    return shutil.which("nmcli") is not None
+
+
+def _parse_nmcli_terse(line):
+    """Split an `nmcli -t` line on unescaped ':' separators, unescaping
+    nmcli's backslash escapes (it escapes ':' and '\\' inside fields, so
+    SSIDs containing colons survive)."""
+    fields, cur, i = [], [], 0
+    while i < len(line):
+        c = line[i]
+        if c == "\\" and i + 1 < len(line):
+            cur.append(line[i + 1])
+            i += 2
+        elif c == ":":
+            fields.append("".join(cur))
+            cur = []
+            i += 1
+        else:
+            cur.append(c)
+            i += 1
+    fields.append("".join(cur))
+    return fields
+
+
+def _wifi_signal_bars(sig):
+    n = max(1, min(4, sig // 25 + 1))
+    return "▮" * n + "▯" * (4 - n)
+
+
+def _parse_wifi_list(text):
+    """Parse `nmcli -t -f IN-USE,SSID,SECURITY,SIGNAL device wifi list`
+    output into networks, deduped by SSID (strongest/active wins),
+    sorted active-first then by signal."""
+    nets = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        f = _parse_nmcli_terse(line)
+        if len(f) < 4:
+            continue
+        inuse, ssid, sec, signal = f[0], f[1], f[2], f[3]
+        if not ssid:  # hidden network
+            continue
+        try:
+            sig = int(signal)
+        except ValueError:
+            sig = 0
+        active = inuse.strip() == "*"
+        secured = bool(sec.strip()) and sec.strip() != "--"
+        prev = nets.get(ssid)
+        if prev is None or active or sig > prev["signal"]:
+            nets[ssid] = {"ssid": ssid, "secured": secured,
+                          "signal": sig, "active": active or
+                          (prev["active"] if prev else False)}
+    return sorted(nets.values(),
+                  key=lambda n: (not n["active"], -n["signal"], n["ssid"].lower()))
+
+
+async def _wifi_scan():
+    """Scan nearby networks; None on failure/unavailable."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "nmcli", "-t", "-f", "IN-USE,SSID,SECURITY,SIGNAL",
+            "device", "wifi", "list", "--rescan", "auto",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+    except (OSError, ValueError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return _parse_wifi_list(out.decode(errors="replace"))
+
+
+async def _wifi_saved_ssids():
+    """Names of saved wifi connections (so we can skip the password
+    prompt for known networks)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "nmcli", "-t", "-f", "NAME,TYPE", "connection", "show",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+    except (OSError, ValueError):
+        return set()
+    saved = set()
+    for line in out.decode(errors="replace").splitlines():
+        f = _parse_nmcli_terse(line)
+        if len(f) >= 2 and "wireless" in f[1]:
+            saved.add(f[0])
+    return saved
+
+
+async def _wifi_connect(ssid, password=None):
+    """Connect to ssid. Returns (ok, message). The password is passed as
+    a literal argv element via exec (no shell), so '!', '$', spaces and
+    quotes need no escaping."""
+    args = ["nmcli", "-w", "25", "device", "wifi", "connect", ssid]
+    if password is not None:
+        args += ["password", password]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+    except (OSError, ValueError) as e:
+        return False, str(e)
+    return proc.returncode == 0, out.decode(errors="replace").strip()
+
+
+async def _wifi_forget(ssid):
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "nmcli", "connection", "delete", "id", ssid,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.communicate()
+    except (OSError, ValueError):
+        return False
+    return proc.returncode == 0
+
+
 def _detect_printers():
     """Return available CUPS destination names.
 
@@ -1611,17 +1739,21 @@ def _list_continuation(line):
 class InputDialog:
     """Text input dialog (new entry, rename)."""
 
-    def __init__(self, title="", label_text="", initial="", ok_text="OK"):
+    def __init__(self, title="", label_text="", initial="", ok_text="OK",
+                 password=False):
         self.future = asyncio.Future()
         self.text_area = TextArea(
             text=initial, multiline=False, width=D(preferred=40),
+            password=password,
         )
         # Start with the cursor at the end so editing a prefilled value
         # (e.g. the vault path or font size) appends instead of prepending.
         self.text_area.buffer.cursor_position = len(initial)
 
         def accept(_buf=None):
-            val = self.text_area.text.strip()
+            # Don't strip passwords — surrounding whitespace can be
+            # significant (WPA allows it).
+            val = self.text_area.text if password else self.text_area.text.strip()
             if not self.future.done():
                 self.future.set_result(val if val else None)
 
@@ -1824,6 +1956,68 @@ class TrashDialog:
     def _restore(self, key):
         if key != "__empty__" and not self.future.done():
             self.future.set_result(("restore", key))
+
+    def cancel(self):
+        if not self.future.done():
+            self.future.set_result(None)
+
+    def __pt_container__(self):
+        return self.dialog
+
+
+class WifiDialog:
+    """Wi-Fi network browser. Enter connects, d forgets, r rescans.
+    Resolves with ('connect'|'forget'|'rescan', ssid_or_None) or None."""
+
+    def __init__(self, networks, initial_index=0):
+        self.future = asyncio.Future()
+        self.net_by_ssid = {n["ssid"]: n for n in networks}
+        self.list = SelectableList(on_select=self._connect)
+        items = []
+        for n in networks:
+            lock = "🔒" if n["secured"] else "  "
+            mark = "● " if n["active"] else "  "
+            bars = _wifi_signal_bars(n["signal"])
+            items.append((n["ssid"], f"{mark}{n['ssid']}", f"{lock} {bars} "))
+        if not items:
+            items = [("__none__", "No networks found — press r to rescan.")]
+        self.list.set_items(items)
+        self.list.selected_index = min(initial_index, len(items) - 1)
+
+        @self.list._kb.add("escape", eager=True)
+        def _esc(event):
+            self.cancel()
+
+        @self.list._kb.add("d")
+        def _forget(event):
+            key = self._cur_key()
+            if key and not self.future.done():
+                self.future.set_result(("forget", key))
+
+        @self.list._kb.add("r")
+        def _rescan(event):
+            if not self.future.done():
+                self.future.set_result(("rescan", None))
+
+        self.dialog = Dialog(
+            title="Wi-Fi — enter: connect · d: forget · r: rescan",
+            body=HSplit([self.list]),
+            buttons=[Button(text="Close", handler=self.cancel)],
+            modal=True,
+            width=D(preferred=60, max=74),
+        )
+
+    def _cur_key(self):
+        idx = self.list.selected_index
+        if 0 <= idx < len(self.list.items):
+            k = self.list.items[idx][0]
+            if not k.startswith("__"):
+                return k
+        return None
+
+    def _connect(self, key):
+        if not key.startswith("__") and not self.future.done():
+            self.future.set_result(("connect", key))
 
     def cancel(self):
         if not self.future.done():
@@ -4379,6 +4573,7 @@ def create_app(storage):
              f"Font size: {font if font is not None else 'default'}"
              "  (applies on restart)"),
             ("vault", f"Vault: {state.storage.vault_dir}"),
+            ("wifi", "Wi-Fi…"),
             ("trash",
              f"View trash ({len(state.storage.list_trash())})"),
             ("empty_trash", "Empty trash"),
@@ -4530,6 +4725,58 @@ def create_app(storage):
                                     p.unlink()
                                 except OSError:
                                     pass
+                elif choice == "wifi":
+                    if not _nmcli_available():
+                        show_notification(
+                            state, "nmcli not found — install"
+                            " network-manager for in-app Wi-Fi.")
+                        continue
+                    widx = 0
+                    while True:
+                        show_notification(
+                            state, "Scanning Wi-Fi…", duration=15)
+                        nets = await _wifi_scan()
+                        if nets is None:
+                            show_notification(state, "Wi-Fi scan failed.")
+                            break
+                        saved = await _wifi_saved_ssids()
+                        wdlg = WifiDialog(nets, widx)
+                        action = await show_dialog_as_float(state, wdlg)
+                        if action is None:
+                            break
+                        widx = wdlg.list.selected_index
+                        verb, ssid = action
+                        if verb == "rescan":
+                            continue
+                        net = wdlg.net_by_ssid.get(ssid, {})
+                        if verb == "forget":
+                            ok = await show_dialog_as_float(
+                                state, ConfirmDialog(f"Forget '{ssid}'?"))
+                            if ok:
+                                await _wifi_forget(ssid)
+                                show_notification(state, f"Forgot '{ssid}'.")
+                            continue
+                        # connect
+                        pw = None
+                        if net.get("secured") and ssid not in saved:
+                            d = InputDialog(
+                                title=f"Connect to {ssid}",
+                                label_text="Password:",
+                                ok_text="Connect", password=True)
+                            pw = await show_dialog_as_float(state, d)
+                            if pw is None:
+                                continue
+                        show_notification(
+                            state, f"Connecting to {ssid}…", duration=30)
+                        ok, msg = await _wifi_connect(ssid, pw)
+                        show_notification(
+                            state,
+                            f"Connected to {ssid}." if ok
+                            else f"Connect failed: {msg[:50]}")
+                        # Exit Options entirely so the result shows on the
+                        # journal screen (reopening Wi-Fi would re-scan and
+                        # bury it). Re-enter Options to manage more.
+                        return
                 elif choice == "empty_trash":
                     n = len(state.storage.list_trash())
                     if n == 0:

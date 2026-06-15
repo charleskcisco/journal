@@ -1461,6 +1461,28 @@ def _extract_headings(text):
     return out
 
 
+def _run_power(reboot=False):
+    """Shut down or reboot without sudo. The kiosk session's PATH often
+    omits /sbin, so try absolute paths (and systemctl) until one
+    launches. systemd's shutdown/systemctl delegate to logind, which
+    polkit permits for the active console session. Returns True if a
+    command launched."""
+    flag = "-r" if reboot else "-h"
+    candidates = [
+        ["/sbin/shutdown", flag, "now"],
+        ["/usr/sbin/shutdown", flag, "now"],
+        ["shutdown", flag, "now"],
+        ["systemctl", "reboot" if reboot else "poweroff"],
+    ]
+    for cmd in candidates:
+        try:
+            subprocess.Popen(cmd)
+            return True
+        except OSError:
+            continue
+    return False
+
+
 def _nmcli_available():
     return shutil.which("nmcli") is not None
 
@@ -4926,12 +4948,12 @@ def create_app(storage):
         # double-press idiom) and adds a reboot option.
         async def _flow():
             choice = await show_dialog_as_float(state, PowerDialog())
-            if choice == "shutdown":
-                subprocess.Popen(["shutdown", "-h", "now"])
-                get_app().exit()
-            elif choice == "reboot":
-                subprocess.Popen(["shutdown", "-r", "now"])
-                get_app().exit()
+            if choice in ("shutdown", "reboot"):
+                if _run_power(reboot=(choice == "reboot")):
+                    get_app().exit()
+                else:
+                    show_notification(
+                        state, "Could not run shutdown/systemctl.")
 
         asyncio.ensure_future(_flow())
 

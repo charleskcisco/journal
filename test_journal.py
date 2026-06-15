@@ -536,6 +536,30 @@ def test_clipboard_paste_no_clobber():
     print("  Paste retry without clipboard clobber OK")
 
 
+def test_run_power():
+    import journal
+    real = journal.subprocess.Popen
+    try:
+        calls = []
+        def fake(cmd, *a, **k):
+            calls.append(cmd)
+            if cmd[0] == "/sbin/shutdown":   # simulate /sbin not on PATH
+                raise FileNotFoundError(2, "No such file", cmd[0])
+            return object()
+        journal.subprocess.Popen = fake
+        assert journal._run_power(reboot=True) is True
+        assert calls[0][0] == "/sbin/shutdown"          # tried first
+        assert calls[1][0] == "/usr/sbin/shutdown"      # fell through
+        assert "-r" in calls[1]                         # reboot flag
+        # All candidates missing -> False, no exception
+        journal.subprocess.Popen = lambda cmd, *a, **k: (
+            _ for _ in ()).throw(FileNotFoundError(2, "x", cmd[0]))
+        assert journal._run_power() is False
+    finally:
+        journal.subprocess.Popen = real
+    print("  Power command fallback OK")
+
+
 def test_extract_headings():
     from journal import _extract_headings
     t = ("# Title\n\nintro\n\n## Section A\nbody\n\n"
@@ -711,6 +735,10 @@ if __name__ == "__main__":
     print("Testing clipboard paste retry...")
     test_clipboard_paste_no_clobber()
     print("  \u2713 Clipboard paste tests passed\n")
+
+    print("Testing power command fallback...")
+    test_run_power()
+    print("  ✓ Power command tests passed\n")
 
     print("Testing heading extraction...")
     test_extract_headings()

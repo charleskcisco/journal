@@ -536,6 +536,21 @@ def test_clipboard_paste_no_clobber():
     print("  Paste retry without clipboard clobber OK")
 
 
+def test_extract_headings():
+    from journal import _extract_headings
+    t = ("# Title\n\nintro\n\n## Section A\nbody\n\n"
+         "```\n# not a heading\n```\n\n### Sub B\nx\n## Section C\n")
+    h = _extract_headings(t)
+    assert [lvl for _, lvl, _ in h] == [1, 2, 3, 2]      # fence # skipped
+    assert [title for _, _, title in h] == \
+        ["Title", "Section A", "Sub B", "Section C"]
+    assert [i for i, _, _ in h] == [0, 4, 11, 13]
+    assert _extract_headings("no headings here\njust text") == []
+    # '#' without a space is not a heading; trailing space title trims
+    assert _extract_headings("#nospace\n#  spaced  ") == [(1, 1, "spaced")]
+    print("  Heading extraction OK")
+
+
 def test_nmcli_parse():
     from journal import (_parse_nmcli_terse, _parse_wifi_list,
                          _wifi_signal_bars)
@@ -696,6 +711,10 @@ if __name__ == "__main__":
     print("Testing clipboard paste retry...")
     test_clipboard_paste_no_clobber()
     print("  \u2713 Clipboard paste tests passed\n")
+
+    print("Testing heading extraction...")
+    test_extract_headings()
+    print("  ✓ Heading extraction tests passed\n")
 
     print("Testing nmcli parsing...")
     test_nmcli_parse()

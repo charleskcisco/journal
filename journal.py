@@ -1443,6 +1443,24 @@ def _aspell_dicts():
     return []
 
 
+def _extract_headings(text):
+    """ATX headings as (line_index, level, title), skipping fenced code
+    blocks (``` or ~~~) so '#' comments inside code aren't picked up."""
+    out = []
+    in_fence = False
+    for i, line in enumerate(text.split("\n")):
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = re.match(r"(#{1,6})\s+(.*)", line)
+        if m:
+            out.append((i, len(m.group(1)), m.group(2).strip()))
+    return out
+
+
 def _nmcli_available():
     return shutil.which("nmcli") is not None
 
@@ -1956,6 +1974,46 @@ class TrashDialog:
     def _restore(self, key):
         if key != "__empty__" and not self.future.done():
             self.future.set_result(("restore", key))
+
+    def cancel(self):
+        if not self.future.done():
+            self.future.set_result(None)
+
+    def __pt_container__(self):
+        return self.dialog
+
+
+class OutlineDialog:
+    """Heading outline for the open note. Resolves with the chosen
+    heading's line index, or None when dismissed."""
+
+    def __init__(self, headings, initial_index=0):
+        self.future = asyncio.Future()
+        self.list = SelectableList(on_select=self._select)
+        items = []
+        for line_idx, level, title in headings:
+            indent = "  " * (level - 1)
+            items.append((str(line_idx), f"{indent}{title or '(untitled)'}"))
+        if not items:
+            items = [("__none__", "No headings in this note.")]
+        self.list.set_items(items)
+        self.list.selected_index = min(initial_index, len(items) - 1)
+
+        @self.list._kb.add("escape", eager=True)
+        def _esc(event):
+            self.cancel()
+
+        self.dialog = Dialog(
+            title="Outline — enter: jump",
+            body=HSplit([self.list]),
+            buttons=[Button(text="Close", handler=self.cancel)],
+            modal=True,
+            width=D(preferred=56, max=72),
+        )
+
+    def _select(self, key):
+        if key != "__none__" and not self.future.done():
+            self.future.set_result(int(key))
 
     def cancel(self):
         if not self.future.done():
@@ -3618,14 +3676,15 @@ def create_app(storage):
     _KB_ALL = [
         ("esc", "Journal"), ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save"),
         ("^b", "Bold"), ("^i", "Italic"), ("^n", "Footnote"), ("^r", "Cite"),
-        ("^f", "Find/Replace"), ("^z", "Undo"), ("^y", "Redo"),
+        ("^f", "Find/Replace"), ("^o", "Outline"), ("^z", "Undo"),
+        ("^y", "Redo"),
     ]
     _KB_SECTIONS = [
         [("esc", "Journal"),
          ("^p", "Commands"), ("^q", "Quit"), ("^s", "Save")],
         [("^b", "Bold"), ("^i", "Italic"), ("^n", "Footnote"),
          ("^r", "Cite"), ("^f", "Find/Replace")],
-        [("^z", "Undo"), ("^y", "Redo")],
+        [("^o", "Outline"), ("^z", "Undo"), ("^y", "Redo")],
     ]
     # Keep descriptions <= 15 chars so each line ( 5 for the key + 2
     # spaces + desc) fits the narrow 22-column guide panel without being
@@ -5020,6 +5079,31 @@ def create_app(storage):
     @kb.add("c-g", filter=is_editor & no_float)
     def _(event):
         toggle_keybindings()
+
+    @kb.add("c-o", filter=is_editor & no_float)
+    def _(event):
+        buf = editor_area.buffer
+        headings = _extract_headings(buf.text)
+        if not headings:
+            show_notification(state, "No headings in this note.")
+            return
+        # Preselect the heading the cursor is currently within.
+        row = buf.document.cursor_position_row
+        cur = 0
+        for i, (line_idx, _lvl, _t) in enumerate(headings):
+            if line_idx <= row:
+                cur = i
+            else:
+                break
+
+        async def _flow():
+            line_idx = await show_dialog_as_float(
+                state, OutlineDialog(headings, cur))
+            if line_idx is not None:
+                buf.cursor_position = \
+                    buf.document.translate_row_col_to_index(line_idx, 0)
+
+        asyncio.ensure_future(_flow())
 
     @kb.add("c-f", filter=is_editor & no_float)
     def _(event):

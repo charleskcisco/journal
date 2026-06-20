@@ -4361,6 +4361,11 @@ def create_app(storage):
             get_app().layout.focus(export_list.window)
         else:
             export_search.text = ""
+            # Leaving the exports screen stops the web share: it's only
+            # meaningful while you're on that screen, and the status hint
+            # advertising the URL disappears with it.
+            if _filebrowser_running():
+                _stop_filebrowser()
             get_app().layout.focus(entry_list.window)
         get_app().invalidate()
 

@@ -3084,34 +3084,34 @@ def create_app(storage):
     # ── Narrow (Manuscripts-style) browser/exports chrome ────────────
 
     def _get_narrow_title():
-        return [
-            ("class:title bold", " Journal"),
-            ("class:hint.sep", "  ·  "),
-            ("class:hint", "journal"),
-        ]
+        return [("class:title bold", " Journal")]
 
     def _get_narrow_exports_title():
-        return [
-            ("class:title bold", " Journal"),
-            ("class:hint.sep", "  ·  "),
-            ("class:hint", "exports"),
-        ]
+        return [("class:title bold", " Exports")]
 
     # Narrow top-right hints. Each view puts its mode-switch up top
     # alongside refresh/shutdown: the browser shows (e) exports, the
     # exports view shows (j) journal. (The wide view keeps its crowded top
     # bar unchanged to avoid overflow; ^r still works there.)
+    # Separator width scales with the display: tight (" · ") on narrow
+    # screens to fit more in the top bar, roomy ("  ·  ") otherwise.
+    def _sep():
+        tight = shutil.get_terminal_size().columns < _NARROW_COLS
+        return ("class:hint.sep", " · " if tight else "  ·  ")
+
+    # Narrow top-right hints. Tight separators plus the plain title (no
+    # "· journal" echo) keep refresh + shutdown on the bar without
+    # overflowing a small panel.
     def _get_narrow_browser_right_hints():
-        S = ("class:hint.sep", "  ·  ")
-        hints = [("class:hint", "(e) exports"), S,
-                 ("class:hint", "(o) options  (^r) refresh"), S]
+        hints = [("class:hint", "(e) exports"), _sep(),
+                 ("class:hint", "(o) options"), _sep(),
+                 ("class:hint", "(^r) refresh"), _sep()]
         hints.extend(_get_shutdown_hint())
         return hints
 
     def _get_narrow_exports_right_hints():
-        S = ("class:hint.sep", "  ·  ")
-        hints = [("class:hint", "(j) journal"), S,
-                 ("class:hint", "(^r) refresh"), S]
+        hints = [("class:hint", "(j) journal"), _sep(),
+                 ("class:hint", "(^r) refresh"), _sep()]
         hints.extend(_get_shutdown_hint())
         return hints
 
@@ -3119,16 +3119,14 @@ def create_app(storage):
     # hint (now in the top bar); the wide top bars still show it via the
     # shared _browser_action_hints / _exports_action_hints.
     def _browser_footer_hints_narrow():
-        S = ("class:hint.sep", "  ·  ")
         return [
-            ("class:hint", " (/) search"), S,
+            ("class:hint", " (/) search"), _sep(),
             ("class:hint", "(c) copy  (d) delete  (n) new  (p) pin  (r) rename"),
         ]
 
     def _exports_footer_hints_narrow():
-        S = ("class:hint.sep", "  ·  ")
         return [
-            ("class:hint", " (/) search"), S,
+            ("class:hint", " (/) search"), _sep(),
             ("class:hint", "(↵) print  (s) share  (d) delete"),
         ]
 
@@ -4692,7 +4690,7 @@ def create_app(storage):
                     _save_config(cfg)
                     get_app().invalidate()
                 elif choice == "width":
-                    widths = [0, 60, 80, 100, 120]
+                    widths = [0, 60, 80, 90, 100, 120]
                     cur = (widths.index(state.editor_width)
                            if state.editor_width in widths else 0)
                     state.editor_width = widths[(cur + 1) % len(widths)]

@@ -1239,35 +1239,43 @@ class SelectableList:
 
         @self._kb.add("up")
         def _up(event):
-            if sl.selected_index > 0:
-                sl.selected_index -= 1
+            j = sl._scan(sl.selected_index - 1, -1)
+            if j is not None:
+                sl.selected_index = j
                 if sl.on_navigate:
                     sl.on_navigate()
 
         @self._kb.add("down")
         def _down(event):
-            if sl.selected_index < len(sl.items) - 1:
-                sl.selected_index += 1
+            j = sl._scan(sl.selected_index + 1, 1)
+            if j is not None:
+                sl.selected_index = j
                 if sl.on_navigate:
                     sl.on_navigate()
 
         @self._kb.add("enter")
         def _enter(event):
             if sl.items and sl.on_select:
-                sl.on_select(sl.items[sl.selected_index][0])
+                item = sl.items[sl.selected_index]
+                if item[0] is not None:   # not a section header
+                    sl.on_select(item[0])
 
         @self._kb.add("home")
         def _home(event):
-            sl.selected_index = 0
-            if sl.on_navigate:
-                sl.on_navigate()
+            j = sl._scan(0, 1)
+            if j is not None:
+                sl.selected_index = j
+                if sl.on_navigate:
+                    sl.on_navigate()
 
         @self._kb.add("end")
         def _end(event):
             if sl.items:
-                sl.selected_index = len(sl.items) - 1
-                if sl.on_navigate:
-                    sl.on_navigate()
+                j = sl._scan(len(sl.items) - 1, -1)
+                if j is not None:
+                    sl.selected_index = j
+                    if sl.on_navigate:
+                        sl.on_navigate()
 
         self._render_width = 0
         self.control = FormattedTextControl(
@@ -1286,13 +1294,36 @@ class SelectableList:
             content=self.control, style="class:select-list", wrap_lines=False,
         )
 
+    def _scan(self, start, step):
+        """Index of the next selectable (non-header) item from `start`
+        in direction `step`, or None. Header items have id None."""
+        i = start
+        while 0 <= i < len(self.items):
+            if self.items[i][0] is not None:
+                return i
+            i += step
+        return None
+
+    def snap(self):
+        """Move the selection onto a selectable row (e.g. off a header
+        it may have landed on)."""
+        if self.items and self.items[self.selected_index][0] is None:
+            j = self._scan(self.selected_index, 1)
+            if j is None:
+                j = self._scan(self.selected_index, -1)
+            self.selected_index = j or 0
+
     def _get_text(self):
         if not self.items:
             return [("class:select-list.empty", "  (empty)\n")]
         width = self._render_width or 0
         result = []
         for i, item in enumerate(self.items):
-            _, label = item[0], item[1]
+            iid, label = item[0], item[1]
+            if iid is None:   # section header: dim, non-selectable
+                prefix = "" if i == 0 else "\n"
+                result.append(("class:form-label bold", f"{prefix} {label}\n"))
+                continue
             right = item[2] if len(item) > 2 else ""
             style = "class:select-list.selected" if i == self.selected_index else ""
             if i == self.selected_index:
@@ -1312,6 +1343,7 @@ class SelectableList:
         self.items = items
         if self.selected_index >= len(items):
             self.selected_index = max(0, len(items) - 1)
+        self.snap()
 
     def __pt_container__(self):
         return self.window
@@ -1968,6 +2000,7 @@ class TrashDialog:
             except (OSError, ValueError):
                 mod = ""
             items.append((str(p), f"  {p.stem}", mod + " "))
+        self.has_files = bool(items)
         if not items:
             items = [("__empty__", "Trash is empty.")]
         self.list.set_items(items)
@@ -1985,8 +2018,13 @@ class TrashDialog:
                 if key != "__empty__" and not self.future.done():
                     self.future.set_result(("delete", key))
 
+        @self.list._kb.add("e")
+        def _empty(event):
+            if self.has_files and not self.future.done():
+                self.future.set_result(("empty", None))
+
         self.dialog = Dialog(
-            title="Trash — enter: restore · d: delete forever",
+            title="Trash — enter: restore · d: delete · e: empty",
             body=HSplit([self.list]),
             buttons=[Button(text="Close", handler=self.cancel)],
             modal=True,
@@ -2154,6 +2192,7 @@ class OptionsDialog:
         self.list.set_items(items)
         if items:
             self.list.selected_index = min(initial_index, len(items) - 1)
+            self.list.snap()
 
         @self.list._kb.add("escape", eager=True)
         def _esc(event):
@@ -4640,28 +4679,37 @@ def create_app(storage):
 
     def _options_items():
         font = _get_foot_font_size()
-        return [
+        items = [
+            (None, "Appearance"),
+            ("scheme", f"Color scheme: {state.color_scheme}"),
+            ("font",
+             f"Font size: {font if font is not None else 'default'}"
+             "  (applies on restart)"),
+            (None, "Journal"),
+            ("vault", f"Vault: {state.storage.vault_dir}"),
             ("folders",
              f"Show folder names: {'on' if state.show_folders else 'off'}"),
-            ("preview",
-             f"Preview pane: {'on' if state.show_preview else 'off'}"),
-            ("width",
-             f"Editor width: {state.editor_width or 'off'}"),
-            ("scheme", f"Color scheme: {state.color_scheme}"),
+        ]
+        # The preview pane does nothing on a narrow display (list-only
+        # layout), so only offer it where it has an effect.
+        if not _is_narrow():
+            items.append(
+                ("preview",
+                 f"Preview pane: {'on' if state.show_preview else 'off'}"))
+        items += [
+            (None, "Editor"),
+            ("width", f"Editor width: {state.editor_width or 'off'}"),
             ("autosave",
              "Auto-save: "
              + (f"{state.autosave_secs}s" if state.autosave_secs else "off")),
             ("spell",
-             f"Spell language: {state.spell_lang or 'default'}"),
-            ("font",
-             f"Font size: {font if font is not None else 'default'}"
-             "  (applies on restart)"),
-            ("vault", f"Vault: {state.storage.vault_dir}"),
+             f"Aspell language: {state.spell_lang or 'default'}"),
+            (None, "Device"),
             ("wifi", "Wi-Fi…"),
             ("trash",
-             f"View trash ({len(state.storage.list_trash())})"),
-            ("empty_trash", "Empty trash"),
+             f"Trash ({len(state.storage.list_trash())})"),
         ]
+        return items
 
     @kb.add("o", filter=entry_list_focused)
     def _(event):
@@ -4792,6 +4840,16 @@ def create_app(storage):
                             break
                         tidx = tdlg.list.selected_index
                         verb, key = action
+                        if verb == "empty":
+                            n = len(state.storage.list_trash())
+                            ok = await show_dialog_as_float(
+                                state,
+                                ConfirmDialog(
+                                    f"Delete {n} trashed note(s) forever?"))
+                            if ok:
+                                state.storage.empty_trash()
+                                show_notification(state, "Trash emptied.")
+                            continue
                         p = Path(key)
                         if verb == "restore":
                             dest = state.storage.restore_trashed(p)
@@ -4861,18 +4919,6 @@ def create_app(storage):
                         # journal screen (reopening Wi-Fi would re-scan and
                         # bury it). Re-enter Options to manage more.
                         return
-                elif choice == "empty_trash":
-                    n = len(state.storage.list_trash())
-                    if n == 0:
-                        show_notification(state, "Trash is empty.")
-                        continue
-                    ok = await show_dialog_as_float(
-                        state,
-                        ConfirmDialog(
-                            f"Delete {n} trashed note(s) forever?"))
-                    if ok:
-                        state.storage.empty_trash()
-                        show_notification(state, "Trash emptied.")
 
         asyncio.ensure_future(_flow())
 

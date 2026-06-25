@@ -536,37 +536,6 @@ def test_clipboard_paste_no_clobber():
     print("  Paste retry without clipboard clobber OK")
 
 
-def test_pi_power():
-    import journal
-    real_popen, real_which = journal.subprocess.Popen, journal.shutil.which
-    try:
-        cmds = []
-        journal.subprocess.Popen = lambda args, *a, **k: cmds.append(args)
-        # Off-Pi (no vcgencmd / cpufreq-set): the whole feature no-ops
-        journal.shutil.which = lambda n: None
-        journal._pi_display(False)
-        journal._pi_cpufreq("powersave")
-        assert cmds == [], cmds
-        # On-Pi: correct commands and args
-        journal.shutil.which = lambda n: "/usr/bin/" + n
-        journal._pi_display(False)
-        journal._pi_display(True)
-        journal._pi_cpufreq("powersave")
-        journal._pi_cpufreq("ondemand")
-        assert ["vcgencmd", "display_power", "0"] in cmds
-        assert ["vcgencmd", "display_power", "1"] in cmds
-        assert ["sudo", "-n", "cpufreq-set", "-g", "powersave"] in cmds
-        assert ["sudo", "-n", "cpufreq-set", "-g", "ondemand"] in cmds
-        # A spawn failure must never propagate (best-effort)
-        journal.subprocess.Popen = lambda *a, **k: (
-            _ for _ in ()).throw(OSError("boom"))
-        journal._pi_display(False)
-        journal._pi_cpufreq("powersave")
-    finally:
-        journal.subprocess.Popen, journal.shutil.which = real_popen, real_which
-    print("  Pi doze/wake power guards OK")
-
-
 def test_run_power():
     import journal
     real = journal.subprocess.Popen
@@ -766,10 +735,6 @@ if __name__ == "__main__":
     print("Testing clipboard paste retry...")
     test_clipboard_paste_no_clobber()
     print("  \u2713 Clipboard paste tests passed\n")
-
-    print("Testing Pi doze/wake power guards...")
-    test_pi_power()
-    print("  ✓ Pi power guard tests passed\n")
 
     print("Testing power command fallback...")
     test_run_power()

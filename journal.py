@@ -29,6 +29,7 @@ from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.layout.containers import (
     ConditionalContainer, DynamicContainer, Float, FloatContainer,
     HSplit, VSplit, Window, WindowAlign,
@@ -1367,6 +1368,7 @@ class AppState:
         self.quit_pending = 0.0
         self.escape_pending = 0.0
         self.showing_exports = False
+        self.dozed = False   # low-power idle: screen off, state live in RAM
         self.show_keybindings = False
         self.editor_dirty = False
         self.root_container = None
@@ -1513,6 +1515,36 @@ def _run_power(reboot=False):
         except OSError:
             continue
     return False
+
+
+def _pi_display(on):
+    """Turn the Pi's display output on/off via vcgencmd. No-op when
+    vcgencmd is absent (i.e. not on a Pi -- Mac, other hardware). Best
+    effort: a failure here must never take down the editor.
+
+    NB: under cage the panel is KMS/DRM-driven, where vcgencmd
+    display_power may not blank it -- verify on the target deck."""
+    if not shutil.which("vcgencmd"):
+        return
+    try:
+        subprocess.Popen(["vcgencmd", "display_power", "1" if on else "0"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+def _pi_cpufreq(governor):
+    """Set the CPU governor (powersave while dozing, ondemand awake).
+    Uses `sudo -n` so it fails fast instead of hanging on a password
+    prompt when the scoped sudoers rule isn't installed; the display-off
+    savings stand on their own without it."""
+    if not shutil.which("cpufreq-set"):
+        return
+    try:
+        subprocess.Popen(["sudo", "-n", "cpufreq-set", "-g", governor],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
 
 
 def _nmcli_available():
@@ -2153,6 +2185,7 @@ class PowerDialog:
         self.future = asyncio.Future()
         self.list = SelectableList(on_select=self._select)
         self.list.set_items([
+            ("doze", "Doze (screen off, instant resume)"),
             ("shutdown", "Shut down"),
             ("reboot", "Reboot"),
         ])
@@ -3076,7 +3109,7 @@ def create_app(storage):
         now = time.monotonic()
         if now - state.quit_pending < 2.0:
             return [("class:accent bold", " (^q) press again to quit ")]
-        return [("class:hint", " (^s) shut down ")]
+        return [("class:hint", " (^s) power ")]
 
     # Action-hint segments shared by the wide top bar (right-aligned,
     # with the shutdown hint appended) and the narrow footer bar
@@ -3850,7 +3883,14 @@ def create_app(storage):
 
     # ── Screen switcher ──────────────────────────────────────────────
 
+    # Blank screen shown while dozing: a fallback so that even if the
+    # panel doesn't physically blank (KMS), the document is hidden and the
+    # waking keystroke lands somewhere harmless.
+    dozed_screen = Window(char=" ")
+
     def get_current_screen():
+        if state.dozed:
+            return dozed_screen
         if state.screen == "editor":
             return editor_screen
         return journal_screen
@@ -3860,6 +3900,20 @@ def create_app(storage):
         floats=[],
     )
     state.root_container = root
+
+    def doze():
+        state.dozed = True
+        _pi_display(False)
+        _pi_cpufreq("powersave")
+        get_app().invalidate()
+
+    def wake():
+        if not state.dozed:
+            return
+        state.dozed = False
+        _pi_display(True)
+        _pi_cpufreq("ondemand")
+        get_app().invalidate()
 
     # ── Auto-save ────────────────────────────────────────────────────
 
@@ -4997,7 +5051,9 @@ def create_app(storage):
         # double-press idiom) and adds a reboot option.
         async def _flow():
             choice = await show_dialog_as_float(state, PowerDialog())
-            if choice in ("shutdown", "reboot"):
+            if choice == "doze":
+                doze()
+            elif choice in ("shutdown", "reboot"):
                 if _run_power(reboot=(choice == "reboot")):
                     get_app().exit()
                 else:
@@ -5005,6 +5061,13 @@ def create_app(storage):
                         state, "Could not run shutdown/systemctl.")
 
         asyncio.ensure_future(_flow())
+
+    # While dozing, any key wakes the deck and is swallowed -- it must not
+    # reach the editor (no stray character/cursor move). State stays live
+    # in RAM, so resume is instant.
+    @kb.add(Keys.Any, filter=Condition(lambda: state.dozed), eager=True)
+    def _(event):
+        wake()
 
     @kb.add("c-u", filter=is_journal & no_float)
     def _(event):
